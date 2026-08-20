@@ -127,6 +127,7 @@ def main():
     ap.add_argument("--t-layers", type=int, default=6)
     ap.add_argument("--heads", type=int, default=6)
     ap.add_argument("--out", default="runs/r4")
+    ap.add_argument("--init", default=None, help="checkpoint to initialize from (e.g. BC)")
     ap.add_argument("--wandb", default=None)
     ap.add_argument("--run-name", default=None)
     args = ap.parse_args()
@@ -139,6 +140,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     model = Model(args.d, args.e_layers, args.t_layers, args.heads).to(device)
+    if args.init:
+        ckpt = torch.load(args.init, map_location=device, weights_only=True)
+        model.load_state_dict(ckpt["model"])
+        print(f"initialized from {args.init}", flush=True)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"device={device} params={n_params / 1e6:.2f}M envs={args.envs} amp={amp}", flush=True)
@@ -272,7 +277,7 @@ def main():
                 vf = (F.mse_loss(val, ret[:, None].expand_as(val), reduction="none")
                       * valid).sum() / nvalid
                 ent = (dist.entropy() * valid).sum() / nvalid
-                sp_t = t["sp"].long().masked_fill(~valid[..., None], -100)
+                sp_t = t["sp"].long().masked_fill(~valid[..., None] | (t["sp"] < 1), -100)
                 sp = F.cross_entropy(sp_logits.reshape(-1, 152), sp_t.reshape(-1),
                                      ignore_index=-100)
                 mv_t = t["mv"].long().masked_fill(~valid[..., None], 0)
