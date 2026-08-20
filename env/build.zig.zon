@@ -1,0 +1,10 @@
+.{
+    .name = .gen1env,
+    .version = "0.1.0",
+    .fingerprint = 0xe9d5feffb7526b1e, // changed if the build complains; see zig build output
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .pkmn = .{ .path = "../engine" },
+    },
+    .paths = .{""},
+}
