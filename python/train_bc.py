@@ -150,8 +150,8 @@ def main():
                f"train acc {m['acc']:.3f} val acc {v['acc']:.3f} "
                f"val spacc {v['spacc']:.3f}")
         if ep % args.eval_every == 0 or ep == args.epochs:
-            wr = evaluate(model, device, device == "cuda", RandomPolicy(1))
-            wm = evaluate(model, device, device == "cuda", MaxDamagePolicy())
+            wr, _ = evaluate(model, device, device == "cuda", RandomPolicy(1))
+            wm, _ = evaluate(model, device, device == "cuda", MaxDamagePolicy())
             metrics.update({"eval/vs_random": wr, "eval/vs_maxdamage": wm})
             msg += f" | vs_random {wr:.3f} vs_maxdmg {wm:.3f}"
             torch.save({"model": model.state_dict(), "epoch": ep, "config": {**vars(args), "dex_feats": True}},
