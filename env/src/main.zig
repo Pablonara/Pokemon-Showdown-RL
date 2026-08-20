@@ -9,8 +9,14 @@
 //!   - masks are built from the engine's own `choices()` (single source of truth)
 //!   - `step` re-derives the legal set and panics on any unmasked action
 //!
-//! Observations are ground truth + `revealed` flags; hiding opponent info is
-//! the model input builder's job (self-play belief targets need the truth).
+//! Two observation variants per player are exposed:
+//!   ints/floats     ground truth (belief-head targets, oracle debugging)
+//!   m_ints/m_floats identical layout, opponent info masked to ladder-visible:
+//!     unrevealed mons zeroed (except hp_frac=1: bench mons are provably
+//!     undamaged in gen1), unseen moves zeroed, opponent pp/exact stats/sleep
+//!     counter/last-selected-move hidden. Public info (active species, status,
+//!     boosts, volatiles, last-used move) stays. NOTE: a selected-but-blocked
+//!     move is currently marked revealed (slight over-reveal; TODO).
 //! Obs layout v1 (per player, perspective-flipped: "mine" first):
 //!   ints  [80]: 2 sides x 6 mons x [species, status, move1..4]  (72)
 //!               my/their active volatiles (low 32 bits)          (2)
@@ -33,7 +39,7 @@ const Choice = pkmn.Choice;
 const Player = pkmn.Player;
 const Result = pkmn.Result;
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const N_ACTIONS: u32 = 10;
 pub const INTS_PER_PLAYER: u32 = 80;
 pub const FLOATS_PER_PLAYER: u32 = 160;
@@ -148,8 +154,10 @@ pub const Env = struct {
     actions: []i32, // n*2, written by caller
     masks: []u8, // n*2*N_ACTIONS
     needs: []u8, // n*2
-    ints: []i32, // n*2*INTS_PER_PLAYER
-    floats: []f32, // n*2*FLOATS_PER_PLAYER
+    ints: []i32, // n*2*INTS_PER_PLAYER (ground truth)
+    floats: []f32, // n*2*FLOATS_PER_PLAYER (ground truth)
+    m_ints: []i32, // masked variant, same layout
+    m_floats: []f32,
     rewards: []f32, // n*2 (nonzero only on done)
     dones: []u8, // n
     ep_turns: []u16, // n, turns of the episode that ended (valid when done)
@@ -171,6 +179,8 @@ pub const Env = struct {
             .needs = try alloc.alloc(u8, n * 2),
             .ints = try alloc.alloc(i32, n * 2 * INTS_PER_PLAYER),
             .floats = try alloc.alloc(f32, n * 2 * FLOATS_PER_PLAYER),
+            .m_ints = try alloc.alloc(i32, n * 2 * INTS_PER_PLAYER),
+            .m_floats = try alloc.alloc(f32, n * 2 * FLOATS_PER_PLAYER),
             .rewards = try alloc.alloc(f32, n * 2),
             .dones = try alloc.alloc(u8, n),
             .ep_turns = try alloc.alloc(u16, n),
@@ -199,6 +209,8 @@ pub const Env = struct {
         alloc.free(env.needs);
         alloc.free(env.ints);
         alloc.free(env.floats);
+        alloc.free(env.m_ints);
+        alloc.free(env.m_floats);
         alloc.free(env.rewards);
         alloc.free(env.dones);
         alloc.free(env.ep_turns);
@@ -353,7 +365,50 @@ pub const Env = struct {
             const side = s.battle.side(player);
             if (side.order[0] > 0) s.revealed[p][side.order[0] - 1] = true;
         }
-        inline for (.{ Player.P1, Player.P2 }, 0..) |player, p| env.encode(i, player, p);
+        inline for (.{ Player.P1, Player.P2 }, 0..) |player, p| {
+            env.encode(i, player, p);
+            env.maskObs(i, player, p);
+        }
+    }
+
+    // Layout landmarks for maskObs (must match encode(); see header comment):
+    // opponent mon int blocks 36..72 (6 blocks x [species,status,m1..4]),
+    // opponent mon float blocks 48..96 (6 x [hp,level,active,revealed,pp1..4]),
+    // int 78 = opponent last_selected_move; floats 149..154 = opponent
+    // sleep-counter + modified stats.
+    const OPP_LSM_INT = 78;
+    const OPP_PRIVATE_F = [2]usize{ 149, 154 };
+
+    fn maskObs(env: *Env, i: u32, player: Player, p: usize) void {
+        const base = (i * 2 + @as(u32, @intCast(p)));
+        const ti = env.ints[base * INTS_PER_PLAYER ..][0..INTS_PER_PLAYER];
+        const tf = env.floats[base * FLOATS_PER_PLAYER ..][0..FLOATS_PER_PLAYER];
+        const mi = env.m_ints[base * INTS_PER_PLAYER ..][0..INTS_PER_PLAYER];
+        const mf = env.m_floats[base * FLOATS_PER_PLAYER ..][0..FLOATS_PER_PLAYER];
+        @memcpy(mi, ti);
+        @memcpy(mf, tf);
+
+        const s = &env.states[i];
+        const opp: usize = @intFromEnum(player.foe());
+        const side = s.battle.side(player.foe());
+        for (0..6) |j| {
+            const ii = 36 + j * 6;
+            const fi = 48 + j * 8;
+            const id = side.order[j];
+            if (id == 0) continue;
+            if (!s.revealed[opp][id - 1]) {
+                @memset(mi[ii .. ii + 6], 0);
+                @memset(mf[fi .. fi + 8], 0);
+                mf[fi] = 1.0; // bench mons are undamaged in gen1
+            } else {
+                for (0..4) |k| {
+                    if (!s.moves_used[opp][id - 1][k]) mi[ii + 2 + k] = 0;
+                }
+                @memset(mf[fi + 4 .. fi + 8], 0); // exact pp hidden
+            }
+        }
+        mi[OPP_LSM_INT] = 0;
+        @memset(mf[OPP_PRIVATE_F[0]..OPP_PRIVATE_F[1]], 0);
     }
 
     fn encode(env: *Env, i: u32, player: Player, p: usize) void {
@@ -432,6 +487,8 @@ const Buffers = extern struct {
     needs: [*]u8,
     ints: [*]i32,
     floats: [*]f32,
+    m_ints: [*]i32,
+    m_floats: [*]f32,
     rewards: [*]f32,
     dones: [*]u8,
     ep_turns: [*]u16,
@@ -461,6 +518,8 @@ export fn g1_buffers(env: *Env, out: *Buffers) void {
         .needs = env.needs.ptr,
         .ints = env.ints.ptr,
         .floats = env.floats.ptr,
+        .m_ints = env.m_ints.ptr,
+        .m_floats = env.m_floats.ptr,
         .rewards = env.rewards.ptr,
         .dones = env.dones.ptr,
         .ep_turns = env.ep_turns.ptr,
@@ -534,6 +593,8 @@ test "env: fuzz random-legal actions" {
         .needs = try alloc.alloc(u8, 16),
         .ints = try alloc.alloc(i32, 16 * INTS_PER_PLAYER),
         .floats = try alloc.alloc(f32, 16 * FLOATS_PER_PLAYER),
+        .m_ints = try alloc.alloc(i32, 16 * INTS_PER_PLAYER),
+        .m_floats = try alloc.alloc(f32, 16 * FLOATS_PER_PLAYER),
         .rewards = try alloc.alloc(f32, 16),
         .dones = try alloc.alloc(u8, 8),
         .ep_turns = try alloc.alloc(u16, 8),
@@ -577,6 +638,20 @@ test "env: fuzz random-legal actions" {
             if (env.dones[i] == 1) {
                 const r = env.rewards[i * 2] + env.rewards[i * 2 + 1];
                 try testing.expectEqual(@as(f32, 0), r); // zero-sum
+            }
+        }
+        // masked-obs invariants for a sample player row
+        const b: usize = 3; // env 1, player 1
+        const ti = env.ints[b * INTS_PER_PLAYER ..][0..INTS_PER_PLAYER];
+        const mi = env.m_ints[b * INTS_PER_PLAYER ..][0..INTS_PER_PLAYER];
+        const mfl = env.m_floats[b * FLOATS_PER_PLAYER ..][0..FLOATS_PER_PLAYER];
+        try testing.expectEqualSlices(i32, ti[0..36], mi[0..36]); // own side intact
+        try testing.expectEqual(@as(i32, 0), mi[Env.OPP_LSM_INT]);
+        for (0..6) |j| {
+            const revealed = mfl[48 + j * 8 + 3];
+            if (revealed == 0 and ti[36 + j * 6] != 0) {
+                try testing.expectEqual(@as(i32, 0), mi[36 + j * 6]); // species hidden
+                try testing.expectEqual(@as(f32, 1.0), mfl[48 + j * 8]); // full hp known
             }
         }
         try testing.expect(steps < 200_000);

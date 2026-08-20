@@ -30,6 +30,8 @@ class _Buffers(ctypes.Structure):
         ("needs", ctypes.POINTER(ctypes.c_uint8)),
         ("ints", ctypes.POINTER(ctypes.c_int32)),
         ("floats", ctypes.POINTER(ctypes.c_float)),
+        ("m_ints", ctypes.POINTER(ctypes.c_int32)),
+        ("m_floats", ctypes.POINTER(ctypes.c_float)),
         ("rewards", ctypes.POINTER(ctypes.c_float)),
         ("dones", ctypes.POINTER(ctypes.c_uint8)),
         ("ep_turns", ctypes.POINTER(ctypes.c_uint16)),
@@ -62,7 +64,7 @@ class Gen1Env:
 
     def __init__(self, pool: str, n: int = 64, seed: int = 0):
         self._lib = _load()
-        assert self._lib.g1_version() == 1, "env version mismatch"
+        assert self._lib.g1_version() == 2, "env version mismatch"
         self._h = self._lib.g1_create(str(pool).encode(), n, seed)
         if not self._h:
             raise RuntimeError(f"g1_create failed (pool={pool})")
@@ -76,6 +78,8 @@ class Gen1Env:
         self.needs = view(b.needs, (n, 2))
         self.ints = view(b.ints, (n, 2, b.ints_per_player))
         self.floats = view(b.floats, (n, 2, b.floats_per_player))
+        self.m_ints = view(b.m_ints, (n, 2, b.ints_per_player))
+        self.m_floats = view(b.m_floats, (n, 2, b.floats_per_player))
         self.rewards = view(b.rewards, (n, 2))
         self.dones = view(b.dones, (n,))
         self.ep_turns = view(b.ep_turns, (n,))
