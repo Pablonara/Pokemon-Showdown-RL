@@ -1,7 +1,7 @@
 # pokemon-showdown-rl
 
 SOTA-targeting RL agent for **Gen 1 Random Battles** on Pokémon Showdown.
-Plan: [PLAN.md](PLAN.md) · Pins: [VERSIONS.md](VERSIONS.md)
+Pins: [VERSIONS.md](VERSIONS.md)
 
 ## Layout
 

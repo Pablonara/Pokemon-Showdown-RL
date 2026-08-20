@@ -12,3 +12,6 @@ __pycache__/
 *.log
 .DS_Store
 /data/replays/
+
+# internal planning docs (local only)
+/PLAN.md
