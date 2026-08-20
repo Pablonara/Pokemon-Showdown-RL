@@ -11,3 +11,4 @@ zig-out/
 __pycache__/
 *.log
 .DS_Store
+/data/replays/
