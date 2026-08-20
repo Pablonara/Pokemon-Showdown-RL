@@ -96,11 +96,12 @@ def run_batches(model, batches, device, args, opt=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--traj", default="data/traj")
-    ap.add_argument("--epochs", type=int, default=4)
+    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--eval-every", type=int, default=5)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--vf", type=float, default=0.5)
     ap.add_argument("--belief", type=float, default=0.5)
-    ap.add_argument("--token-budget", type=int, default=32768)
+    ap.add_argument("--token-budget", type=int, default=16384)
     ap.add_argument("--d", type=int, default=384)
     ap.add_argument("--e-layers", type=int, default=3)
     ap.add_argument("--t-layers", type=int, default=6)
@@ -143,19 +144,21 @@ def main():
         model.eval()
         with torch.no_grad():
             v = run_batches(model, val_batches, device, args, opt=None)
-        wr = evaluate(model, device, device == "cuda", RandomPolicy(1))
-        wm = evaluate(model, device, device == "cuda", MaxDamagePolicy())
         metrics = {f"train/{k}": x for k, x in m.items()}
         metrics.update({f"val/{k}": x for k, x in v.items()})
-        metrics.update({"eval/vs_random": wr, "eval/vs_maxdamage": wm})
+        msg = (f"epoch {ep} ({time.time() - t0:.0f}s) "
+               f"train acc {m['acc']:.3f} val acc {v['acc']:.3f} "
+               f"val spacc {v['spacc']:.3f}")
+        if ep % args.eval_every == 0 or ep == args.epochs:
+            wr = evaluate(model, device, device == "cuda", RandomPolicy(1))
+            wm = evaluate(model, device, device == "cuda", MaxDamagePolicy())
+            metrics.update({"eval/vs_random": wr, "eval/vs_maxdamage": wm})
+            msg += f" | vs_random {wr:.3f} vs_maxdmg {wm:.3f}"
+            torch.save({"model": model.state_dict(), "epoch": ep, "config": vars(args)},
+                       out / f"bc_{ep:02d}.pt")
         if wb:
             wb.log(metrics, step=ep)
-        print(f"epoch {ep} ({time.time() - t0:.0f}s) "
-              f"train acc {m['acc']:.3f} val acc {v['acc']:.3f} "
-              f"val spacc {v['spacc']:.3f} | vs_random {wr:.3f} vs_maxdmg {wm:.3f}",
-              flush=True)
-        torch.save({"model": model.state_dict(), "epoch": ep, "config": vars(args)},
-                   out / f"bc_{ep:02d}.pt")
+        print(msg, flush=True)
 
 
 if __name__ == "__main__":
