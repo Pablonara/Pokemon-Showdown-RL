@@ -314,7 +314,10 @@ async function handleLine(room, line) {
     }
   } else if (cmd === 'init' && parts[1] === 'battle') {
     battles.set(room, new Battle(room, 'p1'));
-    console.log(`battle started: ${room}`);
+    const http = SERVER.replace(/^ws(s?):\/\//, 'http$1://').replace(/\/showdown\/websocket$/, '');
+    const url = /psim\.us|pokemonshowdown\.com/.test(SERVER)
+      ? `https://play.pokemonshowdown.com/${room}` : `${http}/${room}`;
+    console.log(`battle started: ${room}\n  >> spectate live: ${url}`);
   } else if (battles.has(room)) {
     const b = battles.get(room);
     if (cmd === 'player' && parts[2]?.trim() === NAME) {
@@ -334,6 +337,7 @@ async function handleLine(room, line) {
       console.log(`${room}: ${cmd} ${parts[1] ?? ''}`);
       fetch(`${MODEL}/end`, {method: 'POST', body: JSON.stringify({battle: room})}).catch(() => {});
       send(`${room}|gg`);
+      send(`${room}|/savereplay`); // permanent replay link (official servers)
       send(`|/leave ${room}`);
       battles.delete(room);
       if (--searches > 0) send(`|/search ${FORMAT}`);
