@@ -263,6 +263,13 @@ const battles = new Map();
 const ws = new WebSocket(SERVER);
 const send = s => ws.send(s);
 
+function actionLabel(req, a) {
+  if (a <= 3) return req.active?.[0]?.moves?.[a]?.move ?? `move ${a + 1}`;
+  if (a === 9) return 'locked/struggle';
+  const p = req.side.pokemon[a - 3];
+  return `switch ${p ? p.details.split(',')[0] : a - 2}`;
+}
+
 async function act(battle) {
   const req = battle.request;
   if (!req || req.wait) return;
@@ -277,6 +284,13 @@ async function act(battle) {
       }).then(r => r.json());
       action = res.action;
       if (!mask[action]) action = acts[0];
+      // narrate the decision: options by model probability + win estimate
+      const ranked = acts.map(a => [a, res.probs?.[a] ?? 0]).sort((x, y) => y[1] - x[1]);
+      const opts = ranked.map(([a, p]) =>
+        `${a === action ? '>' : ''}${actionLabel(req, a)} ${(p * 100).toFixed(0)}%`).join(', ');
+      const line = `T${battle.turn} [win ${((res.value + 1) * 50).toFixed(0)}%] ${opts}`;
+      console.log(`${battle.room} | ${line}`);
+      if (args.narrate) send(`|/pm ${args.narrate}, ${line.slice(0, 240)}`);
     } catch (err) {
       console.error('model server error:', err.message);
     }

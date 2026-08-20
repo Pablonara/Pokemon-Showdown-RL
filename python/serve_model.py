@@ -84,7 +84,8 @@ def main():
                 dist = masked_dist(model.pi(h), mask)
                 action = int(dist.probs.argmax(-1) if args.greedy else dist.sample())
                 win_prob = float(model.v(h))
-            self._json({"action": action, "value": win_prob})
+            self._json({"action": action, "value": win_prob,
+                        "probs": [round(p, 4) for p in dist.probs[0].tolist()]})
 
     HTTPServer(("127.0.0.1", args.port), H).serve_forever()
 
