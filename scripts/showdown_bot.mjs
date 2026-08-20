@@ -314,8 +314,15 @@ async function handleLine(room, line) {
       }).then(r => r.text());
       const assertion = JSON.parse(res.slice(1)).assertion;
       send(`|/trn ${NAME},0,${assertion}`);
+    } else if (/psim\.us|pokemonshowdown\.com/.test(SERVER)) {
+      // official servers: even guest names need a login-server assertion
+      const res = await fetch(
+        `https://play.pokemonshowdown.com/action.php?act=getassertion&userid=${norm(NAME)}&challstr=${encodeURIComponent(challstr)}`)
+        .then(r => r.text());
+      if (res.startsWith(';')) console.error(`name '${NAME}' is registered; use --pass`);
+      else send(`|/trn ${NAME},0,${res}`);
     } else {
-      send(`|/trn ${NAME},0,`); // unregistered name (local server / guests)
+      send(`|/trn ${NAME},0,`); // local server without security
     }
   } else if (cmd === 'updateuser' && parts[1].trim().replace(/^[!@#$%^&*+~ ]/, '') === NAME) {
     console.log(`logged in as ${NAME}`);
