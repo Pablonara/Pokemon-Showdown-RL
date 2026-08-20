@@ -1,0 +1,24 @@
+{
+  "name": "pokemon-showdown-rl",
+  "version": "1.0.0",
+  "description": "SOTA-targeting RL agent for **Gen 1 Random Battles** on Pokémon Showdown. Pins: [VERSIONS.md](VERSIONS.md)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pablonara/Pokemon-Showdown-RL.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Pablonara/Pokemon-Showdown-RL/issues"
+  },
+  "homepage": "https://github.com/Pablonara/Pokemon-Showdown-RL#readme",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

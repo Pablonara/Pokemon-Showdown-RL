@@ -16,3 +16,4 @@ __pycache__/
 # internal planning docs (local only)
 /PLAN.md
 /data/traj/
+/runs/
