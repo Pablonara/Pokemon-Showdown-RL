@@ -109,7 +109,10 @@ class Opponents:
             self.frozen = Model(cfg.get("d", 384), cfg.get("e_layers", 3),
                                 cfg.get("t_layers", 6), cfg.get("heads", 6),
                                 dex_feats=cfg.get("dex_feats", False)).to(device)
-            self.frozen.load_state_dict(ckpt["model"])
+            # older checkpoints predate the dmg aux head (unused when acting)
+            missing, unexpected = self.frozen.load_state_dict(ckpt["model"], strict=False)
+            assert not unexpected and all(k.startswith("dmg.") for k in missing), \
+                (missing, unexpected)
             self.frozen.eval()
             n_block = max(1, int(n_envs * args.league_share))
             self.block[-n_block:] = True
