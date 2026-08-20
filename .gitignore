@@ -1,0 +1,13 @@
+# vendored deps — pinned in VERSIONS.md
+/engine/
+/pokemon-showdown/
+
+# generated artifacts
+/teams/
+node_modules/
+.zig-cache/
+zig-cache/
+zig-out/
+__pycache__/
+*.log
+.DS_Store
