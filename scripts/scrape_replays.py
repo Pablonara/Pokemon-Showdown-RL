@@ -10,6 +10,7 @@ gen1randombattle) into JSONL shards. Resumable, deduplicating, polite.
 Usage: python3 scripts/scrape_replays.py [format] [out_dir]
 """
 
+import fcntl
 import json
 import pathlib
 import sys
@@ -23,6 +24,15 @@ DELAY = 0.25  # seconds between requests
 SHARD_SIZE = 2000
 
 OUT.mkdir(parents=True, exist_ok=True)
+
+# exactly one scraper per output dir (a second concurrent instance would
+# clobber state.json and duplicate downloads)
+_lock = (OUT / ".lock").open("w")
+try:
+    fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
+    sys.exit(f"another scraper is already running on {OUT}")
+
 state_path = OUT / "state.json"
 state = json.loads(state_path.read_text()) if state_path.exists() else {"before": None, "done": []}
 done = set(state["done"])
@@ -81,7 +91,5 @@ while True:
     rate = (len(done) - total0) / max(time.time() - t0, 1)
     print(f"{len(done)} replays (oldest {time.strftime('%Y-%m-%d', time.localtime(before))}, "
           f"{rate:.1f}/s)", flush=True)
-    if len(page) < 51 and len(page) < 10:  # short page = near the end
-        print("archive exhausted", flush=True)
-        break
+
 print(f"done: {len(done)} replays in {OUT}", flush=True)

@@ -123,6 +123,8 @@ def main():
     ap.add_argument("--vf", type=float, default=0.5)
     ap.add_argument("--eval-every", type=int, default=10)
     ap.add_argument("--out", default="runs/ppo_smoke")
+    ap.add_argument("--wandb", default=None, help="wandb project name; enables logging")
+    ap.add_argument("--run-name", default=None)
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -136,6 +138,12 @@ def main():
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"device={device} params={n_params / 1e6:.2f}M envs={args.envs}", flush=True)
+
+    wb = None
+    if args.wandb:
+        import wandb  # key via WANDB_API_KEY env var; never in the repo
+        wb = wandb.init(project=args.wandb, name=args.run_name,
+                        config={**vars(args), "params": n_params})
 
     env = Gen1Env(POOL, n=args.envs, seed=1)
     open_rows = [[[] for _ in range(2)] for _ in range(args.envs)]
@@ -235,15 +243,25 @@ def main():
                 ent_s += ent.item()
                 nb += 1
 
-        msg = (f"it {it} rows {n} ({n / collect_dt:.0f}/s) "
-               f"ep_turns {np.mean(ep_turns_hist[-500:]):.1f} "
+        metrics = {
+            "rows": n, "rows_per_s": n / collect_dt,
+            "ep_turns": float(np.mean(ep_turns_hist[-500:])),
+            "loss/pg": pl_s / nb, "loss/vf": vl_s / nb,
+            "loss/entropy": ent_s / nb, "loss/kl": kl_s / nb,
+        }
+        msg = (f"it {it} rows {n} ({metrics['rows_per_s']:.0f}/s) "
+               f"ep_turns {metrics['ep_turns']:.1f} "
                f"pg {pl_s / nb:.4f} vf {vl_s / nb:.4f} ent {ent_s / nb:.3f} kl {kl_s / nb:.4f}")
         if it % args.eval_every == 0 or it == args.iters:
             model.eval()
             wr, dr, t_r = evaluate(model, device, RandomPolicy(1))
             wm, dm, t_m = evaluate(model, device, MaxDamagePolicy())
+            metrics.update({"eval/vs_random": wr, "eval/vs_maxdamage": wm,
+                            "eval/draws_vs_random": dr, "eval/turns_vs_maxdamage": t_m})
             msg += f" | vs_random {wr:.3f} vs_maxdmg {wm:.3f} (turns {t_m:.0f})"
             torch.save({"model": model.state_dict(), "iter": it}, out / f"ckpt_{it:05d}.pt")
+        if wb:
+            wb.log(metrics, step=it)
         print(msg, flush=True)
         log_f.write(msg.replace(" ", ",") + "\n")
         log_f.flush()
