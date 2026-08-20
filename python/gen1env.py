@@ -10,11 +10,13 @@ Smoke test / benchmark:
 
 import ctypes
 import pathlib
+import sys
 
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-LIB = ROOT / "env" / "zig-out" / "lib" / "libgen1env.dylib"
+_SUFFIX = "dylib" if sys.platform == "darwin" else "so"
+LIB = ROOT / "env" / "zig-out" / "lib" / f"libgen1env.{_SUFFIX}"
 
 N_ACTIONS = 10
 ACTION_NAMES = ["move 1", "move 2", "move 3", "move 4",
