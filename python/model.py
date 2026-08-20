@@ -13,6 +13,9 @@ position embeddings, a slight train/rollout mismatch for >CTX episodes (<1%%
 of gen1 battles) - accepted, documented.
 """
 
+import json
+import pathlib
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,6 +23,38 @@ import torch.nn.functional as F
 N_ACTIONS = 10
 N_MON, MON_INTS, MON_FLOATS = 12, 6, 8
 CTX = 128
+
+
+def _dex_tables():
+    """Static dex knowledge as tensors: the model should not have to rediscover
+    the type chart, move powers, or base stats from win/loss rewards."""
+    data = json.loads((pathlib.Path(__file__).parent.parent / "data" / "gen1.json").read_text())
+    n_types = len(data["types"])
+    move_feat = torch.zeros(166, 3 + n_types)  # [power/100, acc/100, status, type 1-hot]
+    for num, m in data["moves"].items():
+        i = int(num)
+        move_feat[i, 0] = (m["power"] or 0) / 100.0
+        move_feat[i, 1] = (m["accuracy"] or 100) / 100.0
+        move_feat[i, 2] = 1.0 if m["status"] else 0.0
+        move_feat[i, 3 + m["type"]] = 1.0
+    species_feat = torch.zeros(152, 5 + n_types)  # [base stats/150, type multi-hot]
+    move_type = torch.zeros(166, dtype=torch.long)
+    sp_t1 = torch.zeros(152, dtype=torch.long)
+    sp_t2 = torch.zeros(152, dtype=torch.long)
+    for num, s in data["species"].items():
+        i = int(num)
+        for k, st in enumerate(s["stats"]):
+            species_feat[i, k] = st / 150.0
+        for t in s["types"]:
+            species_feat[i, 5 + t] = 1.0
+        sp_t1[i] = s["types"][0]
+        sp_t2[i] = s["types"][-1]  # mono-type: t2 == t1... chart row 0 is used
+    for num, m in data["moves"].items():
+        move_type[int(num)] = m["type"]
+    chart = torch.tensor(data["chart"], dtype=torch.float32)
+    # dual-type effectiveness multiplies; guard the mono-type double-count
+    mono = sp_t1 == sp_t2
+    return move_feat, species_feat, move_type, sp_t1, sp_t2, mono, chart
 
 
 class Block(nn.Module):
@@ -87,14 +122,29 @@ class ActorCache:
 
 
 class Model(nn.Module):
-    def __init__(self, d=384, e_layers=3, t_layers=6, heads=6):
+    def __init__(self, d=384, e_layers=3, t_layers=6, heads=6, dex_feats=True):
         super().__init__()
         self.d, self.heads, self.t_layers = d, heads, t_layers
+        self.dex_feats = dex_feats
         self.species = nn.Embedding(152, 48)
         self.move = nn.Embedding(166, 48)
         self.status = nn.Embedding(256, 16)
-        self.mon_in = nn.Linear(48 + 48 + 16 + MON_FLOATS, d)
-        self.global_in = nn.Linear(160 - N_MON * MON_FLOATS, d)
+        mf, sf, mt, t1, t2, mono, chart = _dex_tables()
+        if dex_feats:
+            self.register_buffer("MOVE_FEAT", mf)
+            self.register_buffer("SPECIES_FEAT", sf)
+            self.register_buffer("MOVE_TYPE", mt)
+            self.register_buffer("SP_T1", t1)
+            self.register_buffer("SP_T2", t2)
+            self.register_buffer("SP_MONO", mono)
+            self.register_buffer("CHART", chart)
+            mon_dim = (48 + sf.shape[1]) + (48 + mf.shape[1]) + 16 + MON_FLOATS
+            glob_dim = 160 - N_MON * MON_FLOATS + 4  # + my 4 moves' effectiveness
+        else:
+            mon_dim = 48 + 48 + 16 + MON_FLOATS
+            glob_dim = 160 - N_MON * MON_FLOATS
+        self.mon_in = nn.Linear(mon_dim, d)
+        self.global_in = nn.Linear(glob_dim, d)
         self.tok_pos = nn.Parameter(torch.randn(1, N_MON + 1, d) * 0.02)
         mk = lambda: nn.TransformerEncoderLayer(  # noqa: E731
             d, heads, dim_feedforward=4 * d, batch_first=True,
@@ -108,6 +158,7 @@ class Model(nn.Module):
         self.v = nn.Linear(d, 1)
         self.belief_sp = nn.Linear(d, 6 * 152)
         self.belief_mv = nn.Linear(d, 24 * 166)
+        self.dmg = nn.Linear(d, 2)  # aux: next-step hp_frac delta (mine, theirs)
         nn.init.orthogonal_(self.pi.weight, gain=0.01)
         nn.init.zeros_(self.pi.bias)
 
@@ -119,13 +170,29 @@ class Model(nn.Module):
         """(B,80) ints, (B,160) floats -> (B,d)."""
         mi = ints[:, :72].view(-1, N_MON, MON_INTS).long()
         mf = floats[:, :96].view(-1, N_MON, MON_FLOATS)
+        sp = mi[..., 0].clamp(0, 151)
+        mv = mi[..., 2:6].clamp(0, 165)
+        sp_e = self.species(sp)
+        mv_e = self.move(mv)
+        if self.dex_feats:
+            sp_e = torch.cat([sp_e, self.SPECIES_FEAT[sp]], dim=-1)
+            mv_e = torch.cat([mv_e, self.MOVE_FEAT[mv]], dim=-1)
         mon = self.mon_in(torch.cat([
-            self.species(mi[..., 0].clamp(0, 151)),
-            self.move(mi[..., 2:6].clamp(0, 165)).mean(dim=2),
-            self.status(mi[..., 1].clamp(0, 255)),
-            mf,
+            sp_e, mv_e.mean(dim=2), self.status(mi[..., 1].clamp(0, 255)), mf,
         ], dim=-1))
-        glob = self.global_in(floats[:, 96:]).unsqueeze(1)
+        g = floats[:, 96:]
+        if self.dex_feats:
+            # effectiveness of my active's 4 moves vs their active (the exact
+            # quantity the max-damage baseline computes); dual types multiply
+            my_moves = mi[:, 0, 2:6].clamp(0, 165)
+            their = mi[:, 6, 0].clamp(0, 151)
+            mt = self.MOVE_TYPE[my_moves]
+            e1 = self.CHART[mt, self.SP_T1[their].unsqueeze(1)]
+            e2 = self.CHART[mt, self.SP_T2[their].unsqueeze(1)]
+            eff = torch.where(self.SP_MONO[their].unsqueeze(1), e1, e1 * e2)
+            eff = eff * (self.MOVE_FEAT[my_moves][..., 0] > 0)  # zero for status moves
+            g = torch.cat([g, eff / 4.0], dim=-1)
+        glob = self.global_in(g).unsqueeze(1)
         x = torch.cat([glob, mon], dim=1) + self.tok_pos
         return self.entity(x)[:, 0]
 

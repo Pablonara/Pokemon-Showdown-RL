@@ -107,7 +107,8 @@ class Opponents:
             ckpt = torch.load(args.league, map_location=device, weights_only=True)
             cfg = ckpt.get("config", {})
             self.frozen = Model(cfg.get("d", 384), cfg.get("e_layers", 3),
-                                cfg.get("t_layers", 6), cfg.get("heads", 6)).to(device)
+                                cfg.get("t_layers", 6), cfg.get("heads", 6),
+                                dex_feats=cfg.get("dex_feats", False)).to(device)
             self.frozen.load_state_dict(ckpt["model"])
             self.frozen.eval()
             n_block = max(1, int(n_envs * args.league_share))
@@ -243,6 +244,8 @@ def main():
     ap.add_argument("--league-share", type=float, default=0.1)
     ap.add_argument("--anchor-kl", type=float, default=0.02)
     ap.add_argument("--anchor-every", type=int, default=150)
+    ap.add_argument("--dmg", type=float, default=1.0, help="damage-prediction aux weight")
+    ap.add_argument("--dex-feats", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--eval-every", type=int, default=25)
     ap.add_argument("--d", type=int, default=384)
     ap.add_argument("--e-layers", type=int, default=3)
@@ -261,7 +264,8 @@ def main():
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
 
-    model = Model(args.d, args.e_layers, args.t_layers, args.heads).to(device)
+    model = Model(args.d, args.e_layers, args.t_layers, args.heads,
+                  dex_feats=args.dex_feats).to(device)
     if args.init:
         ckpt = torch.load(args.init, map_location=device, weights_only=True)
         model.load_state_dict(ckpt["model"])
@@ -410,6 +414,7 @@ def main():
                     val = model.v(h).squeeze(-1).float()
                     sp_logits = model.belief_sp(h).view(B, T, 6, 152).float()
                     mv_logits = model.belief_mv(h).view(B, T, 24, 166).float()
+                    dmg_pred = model.dmg(h).float()
                 logp = dist.log_prob(t["act"])
                 ratio = (logp - t["logp"]).exp()
                 pg = -(torch.min(ratio * adv, ratio.clamp(1 - args.clip, 1 + args.clip) * adv)
@@ -431,8 +436,19 @@ def main():
                 mv_t = t["mv"].long().masked_fill(~valid[..., None], 0)
                 mv = F.cross_entropy(mv_logits.reshape(-1, 166), mv_t.reshape(-1),
                                      ignore_index=0)
+                # damage aux: next-step hp_frac deltas of both actives; only
+                # where t+1 is valid and neither active switched
+                hp_me, hp_them = t["mf"][:, :, 0], t["mf"][:, :, 48]
+                same = ((t["mi"][:, 1:, 0] == t["mi"][:, :-1, 0])
+                        & (t["mi"][:, 1:, 36] == t["mi"][:, :-1, 36])
+                        & valid[:, 1:])
+                d_tgt = torch.stack([hp_me[:, 1:] - hp_me[:, :-1],
+                                     hp_them[:, 1:] - hp_them[:, :-1]], dim=-1)
+                dmg = (F.mse_loss(dmg_pred[:, :-1], d_tgt, reduction="none").sum(-1)
+                       * same).sum() / same.sum().clamp(min=1)
                 loss = (pg + args.vf * vf - args.ent * ent
-                        + args.belief * 0.5 * (sp + mv) + args.anchor_kl * akl)
+                        + args.belief * 0.5 * (sp + mv) + args.anchor_kl * akl
+                        + args.dmg * dmg)
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), 0.5)
@@ -444,6 +460,7 @@ def main():
                     agg["kl"] += ((t["logp"] - logp) * valid).sum().item() / nvalid.item()
                 for key, tv in (("pg", pg), ("vf", vf), ("ent", ent), ("sp", sp), ("mv", mv)):
                     agg[key] += tv.item()
+                agg["dmg"] = agg.get("dmg", 0.0) + dmg.item()
                 agg["nb"] += 1
 
         if anchor is not None and it % args.anchor_every == 0:
@@ -459,6 +476,7 @@ def main():
             "loss/entropy": agg["ent"] / nb, "loss/kl": agg["kl"] / nb,
             "belief/sp_loss": agg["sp"] / nb, "belief/mv_loss": agg["mv"] / nb,
             "belief/sp_acc_unrevealed": agg["spacc"] / nb,
+            "loss/dmg": agg.get("dmg", 0.0) / nb,
         }
         msg = (f"it {it} rows {slab.ptr} ({metrics['rows_per_s']:.0f}/s) "
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "

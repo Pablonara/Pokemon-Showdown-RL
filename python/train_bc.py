@@ -154,7 +154,7 @@ def main():
             wm = evaluate(model, device, device == "cuda", MaxDamagePolicy())
             metrics.update({"eval/vs_random": wr, "eval/vs_maxdamage": wm})
             msg += f" | vs_random {wr:.3f} vs_maxdmg {wm:.3f}"
-            torch.save({"model": model.state_dict(), "epoch": ep, "config": vars(args)},
+            torch.save({"model": model.state_dict(), "epoch": ep, "config": {**vars(args), "dex_feats": True}},
                        out / f"bc_{ep:02d}.pt")
         if wb:
             wb.log(metrics, step=ep)
