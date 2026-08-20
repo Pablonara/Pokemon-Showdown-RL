@@ -320,8 +320,9 @@ async function handleLine(room, line) {
   } else if (cmd === 'updateuser' && parts[1].trim().replace(/^[!@#$%^&*+~ ]/, '') === NAME) {
     console.log(`logged in as ${NAME}`);
     if (searches > 0) send(`|/search ${FORMAT}`);
+    if (args.challenge) send(`|/challenge ${args.challenge}, ${FORMAT}`);
   } else if (cmd === 'pm' && parts[3]?.startsWith('/challenge')) {
-    const who = parts[1].trim().slice(1);
+    const who = parts[1].replace(/[^A-Za-z0-9]/g, ''); // strip rank prefix -> userid
     if (args.accept !== undefined && parts[3].includes(FORMAT)) {
       console.log(`accepting challenge from ${who}`);
       send(`|/accept ${who}`);
