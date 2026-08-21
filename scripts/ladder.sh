@@ -16,7 +16,13 @@ shift || true
 #   PS_PASS=password
 [ -f .ladder.env ] && set -a && . .ladder.env && set +a
 : "${PS_USER:?set PS_USER to the bot account name}"
-: "${PS_PASS:?set PS_PASS to the bot account password}"
+if [ -z "${PS_PASS:-}" ]; then
+  echo "NOTE: no PS_PASS - playing as unregistered guest '$PS_USER'"
+  echo "      (name is unowned; rating can be inherited by whoever takes it)"
+  PASS_ARGS=()
+else
+  PASS_ARGS=(--pass "$PS_PASS")
+fi
 
 mkdir -p logs
 CKPT="${MODEL_CKPT:-runs/serving.pt}" # refresh_bot.sh keeps this at the newest run
@@ -34,7 +40,7 @@ TRIES=0
 while [ "$DONE" -lt "$GAMES" ] && [ "$TRIES" -lt 5 ]; do
   node scripts/showdown_bot.mjs \
     --server wss://sim3.psim.us/showdown/websocket \
-    --name "$PS_USER" --pass "$PS_PASS" \
+    --name "$PS_USER" "${PASS_ARGS[@]}" \
     --search "$((GAMES - DONE))" --timer "$@" 2>&1 | tee -a "$LOG" || true
   DONE=$(grep -cE ": (win|tie)" "$LOG" || true)
   TRIES=$((TRIES + 1))
