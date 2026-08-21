@@ -27,7 +27,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from gen1env import Gen1Env, N_ACTIONS  # noqa: E402
+from gen1env import Gen1Env, N_ACTIONS, OBS_INTS, OBS_FLOATS  # noqa: E402
 from eval_v0 import MaxDamagePolicy, RandomPolicy  # noqa: E402
 from model import CTX, Model  # noqa: E402
 
@@ -335,10 +335,10 @@ def main():
             rows = np.array([r for r in all_rows if opps.trains(r)], dtype=np.int64)
             if len(rows):
                 k = len(rows)
-                mi = env.m_ints.reshape(-1, 80)[rows]
-                mf = env.m_floats.reshape(-1, 160)[rows]
+                mi = env.m_ints.reshape(-1, OBS_INTS)[rows]
+                mf = env.m_floats.reshape(-1, OBS_FLOATS)[rows]
                 mk = env.masks.reshape(-1, N_ACTIONS)[rows]
-                ti = env.ints.reshape(-1, 80)[rows]
+                ti = env.ints.reshape(-1, OBS_INTS)[rows]
                 with torch.no_grad(), autocast():
                     idx = torch.from_numpy(rows).to(device)
                     h = model.step(torch.from_numpy(mi).to(device),
@@ -405,7 +405,7 @@ def main():
         with torch.no_grad():
             for batch, (t, lens, ret, valid) in zip(batches, padded):
                 with autocast():
-                    emb = model.embed_step(t["mi"].view(-1, 80), t["mf"].view(-1, 160))
+                    emb = model.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
                     h = model.forward_seq(emb.view(len(batch), -1, model.d), lens)
                     val = model.v(h).squeeze(-1).float().cpu().numpy()
                 for b, e in enumerate(batch):
@@ -433,7 +433,7 @@ def main():
                 B, T = t["act"].shape
                 nvalid = valid.sum().clamp(min=1)
                 with autocast():
-                    emb = model.embed_step(t["mi"].view(-1, 80), t["mf"].view(-1, 160))
+                    emb = model.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
                     h = model.forward_seq(emb.view(B, T, model.d), lens)
                     dist = masked_dist(model.pi(h), t["mask"])
                     val = model.v(h).squeeze(-1).float()
@@ -449,7 +449,7 @@ def main():
                 akl = torch.zeros((), device=device)
                 if anchor is not None:
                     with torch.no_grad(), autocast():
-                        a_emb = anchor.embed_step(t["mi"].view(-1, 80), t["mf"].view(-1, 160))
+                        a_emb = anchor.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
                         a_h = anchor.forward_seq(a_emb.view(B, T, model.d), lens)
                         a_logits = anchor.pi(a_h).float().masked_fill(t["mask"] == 0, -1e9)
                     a_logp = F.log_softmax(a_logits, -1)

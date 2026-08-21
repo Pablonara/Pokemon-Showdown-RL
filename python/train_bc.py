@@ -19,7 +19,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from gen1env import OBS_INTS, OBS_FLOATS  # noqa: E402
 from model import CTX, Model  # noqa: E402
+
+# NOTE: data/traj shards are obs v1 (160f); BC requires a regenerated corpus
+# from the v3 replayer before it can train again (PLAN: era-binned reparse).
 from train_fast import batches_of, evaluate, masked_dist, pad_batch  # noqa: E402
 from eval_v0 import MaxDamagePolicy, RandomPolicy  # noqa: E402
 
@@ -62,7 +66,7 @@ def run_batches(model, batches, device, args, opt=None):
         B, T = t["act"].shape
         nvalid = valid.sum().clamp(min=1)
         with torch.autocast("cuda", torch.bfloat16, enabled=amp):
-            emb = model.embed_step(t["mi"].view(-1, 80), t["mf"].view(-1, 160))
+            emb = model.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
             h = model.forward_seq(emb.view(B, T, model.d), lens)
             dist = masked_dist(model.pi(h), t["mask"])
             val = model.v(h).squeeze(-1).float()

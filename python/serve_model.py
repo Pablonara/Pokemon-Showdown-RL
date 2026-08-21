@@ -20,8 +20,19 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from model import Model  # noqa: E402
+from model import OBS_FLOATS, Model, load_expanded  # noqa: E402
 from train_fast import masked_dist  # noqa: E402
+
+
+def pad_obs_v1(floats):
+    """Map a v1 (160f) observation from the not-yet-updated bot into the v3
+    layout (new features zeroed) - mirrors model.load_expanded's column map."""
+    out = np.zeros(OBS_FLOATS, np.float32)
+    old = np.asarray(floats, np.float32)
+    for j in range(12):
+        out[j * 13:j * 13 + 8] = old[j * 8:j * 8 + 8]
+    out[156:156 + 59] = old[96:96 + 59]
+    return out
 
 MAX_BATTLES = 64
 
@@ -42,8 +53,12 @@ def main():
     cfg = ckpt.get("config", {})
     model = Model(cfg.get("d", 384), cfg.get("e_layers", 3), cfg.get("t_layers", 6),
                   cfg.get("heads", 6), dex_feats=cfg.get("dex_feats", True)).to(device)
-    missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
-    assert not unexpected and all(k.startswith("dmg.") for k in missing)
+    if ckpt["model"]["mon_in.weight"].shape == model.mon_in.weight.shape:
+        missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
+        assert not unexpected and all(k.startswith("dmg.") for k in missing)
+    else:  # v1-obs checkpoint: expand (function-preserving)
+        load_expanded(model, ckpt["model"])
+        print("note: v1 checkpoint expanded to obs v3", flush=True)
     model.eval()
     cache = model.new_cache(MAX_BATTLES, device)
     slots = {}  # battle id -> cache slot
@@ -79,8 +94,11 @@ def main():
                     return self._json({"error": "no free battle slots"}, 503)
                 slots[bid] = free.pop()
             slot = slots[bid]
+            f = np.asarray(req["floats"], np.float32)
+            if len(f) != OBS_FLOATS:
+                f = pad_obs_v1(f)  # bot still sends v1 obs
             ints = torch.tensor(np.asarray(req["ints"], np.int32)[None], device=device)
-            floats = torch.tensor(np.asarray(req["floats"], np.float32)[None], device=device)
+            floats = torch.tensor(f[None], device=device)
             mask = torch.tensor(np.asarray(req["mask"], np.uint8)[None], device=device)
             with torch.no_grad():
                 h = model.step(ints, floats, cache, torch.tensor([slot], device=device))
