@@ -300,6 +300,28 @@ async function act(battle) {
   send(`${battle.room}|/choose ${choice}|${req.rqid ?? ''}`);
 }
 
+let loggedIn = false;
+setTimeout(() => {
+  if (!loggedIn) {
+    console.error('login did not complete within 30s (login server slow/unreachable?) - exiting');
+    process.exit(2); // nonzero so ladder.sh auto-resume retries
+  }
+}, 30000);
+
+async function fetchText(url, opts = {}, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, {...opts, signal: AbortSignal.timeout(10000)});
+      return await res.text();
+    } catch (err) {
+      console.error(`login-server fetch failed (${i + 1}/${tries}): ${err.message}`);
+      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+    }
+  }
+  console.error('login server unreachable - exiting');
+  process.exit(2);
+}
+
 async function handleLine(room, line) {
   if (!line.startsWith('|')) return;
   const parts = line.slice(1).split('|');
@@ -307,24 +329,39 @@ async function handleLine(room, line) {
   if (cmd === 'challstr') {
     const challstr = parts.slice(1).join('|');
     if (args.pass) {
-      const res = await fetch('https://play.pokemonshowdown.com/action.php', {
+      const res = await fetchText('https://play.pokemonshowdown.com/action.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: `act=login&name=${encodeURIComponent(NAME)}&pass=${encodeURIComponent(args.pass)}&challstr=${challstr}`,
-      }).then(r => r.text());
+      });
       const assertion = JSON.parse(res.slice(1)).assertion;
+      if (!assertion) {
+        console.error('login failed (bad credentials?):', res.slice(0, 120));
+        process.exit(2);
+      }
       send(`|/trn ${NAME},0,${assertion}`);
     } else if (/psim\.us|pokemonshowdown\.com/.test(SERVER)) {
       // official servers: even guest names need a login-server assertion
-      const res = await fetch(
-        `https://play.pokemonshowdown.com/action.php?act=getassertion&userid=${norm(NAME)}&challstr=${encodeURIComponent(challstr)}`)
-        .then(r => r.text());
-      if (res.startsWith(';')) console.error(`name '${NAME}' is registered; use --pass`);
-      else send(`|/trn ${NAME},0,${res}`);
+      const res = await fetchText(
+        `https://play.pokemonshowdown.com/action.php?act=getassertion&userid=${norm(NAME)}&challstr=${encodeURIComponent(challstr)}`);
+      if (res.startsWith(';')) {
+        console.error(`name '${NAME}' is registered; use --pass - exiting`);
+        process.exit(2);
+      }
+      if (!res || res.startsWith('<') || res.length < 32) {
+        console.error('login server returned garbage (rate limit/challenge?):',
+          JSON.stringify(res.slice(0, 120)));
+        process.exit(2);
+      }
+      send(`|/trn ${NAME},0,${res}`);
     } else {
       send(`|/trn ${NAME},0,`); // local server without security
     }
+  } else if (cmd === 'popup' || cmd === 'nametaken') {
+    console.error(`server says: |${cmd}|`, parts.slice(1).join('|').slice(0, 200));
+    if (!loggedIn) process.exit(2);
   } else if (cmd === 'updateuser' && parts[1].trim().replace(/^[!@#$%^&*+~ ]/, '') === NAME) {
+    loggedIn = true;
     console.log(`logged in as ${NAME}`);
     if (searches > 0) send(`|/search ${FORMAT}`);
     if (args.challenge) send(`|/challenge ${args.challenge}, ${FORMAT}`);
