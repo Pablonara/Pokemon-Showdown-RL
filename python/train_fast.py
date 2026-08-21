@@ -502,6 +502,10 @@ def main():
             "belief/sp_loss": agg["sp"] / nb, "belief/mv_loss": agg["mv"] / nb,
             "belief/sp_acc_unrevealed": agg["spacc"] / nb,
             "loss/dmg": agg.get("dmg", 0.0) / nb,
+            # plasticity tripwire: are the obs-v3 feature columns being used?
+            # (mon block cols 8..13 = maxhp+usage; global cols 59..65 = events)
+            "surgery/new_col_norm": float(
+                model.mon_in.weight[:, -5:].norm() + model.global_in.weight[:, 59:65].norm()),
         }
         msg = (f"it {it} rows {slab.ptr} ({metrics['rows_per_s']:.0f}/s) "
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "
