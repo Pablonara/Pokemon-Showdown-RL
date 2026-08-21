@@ -357,6 +357,13 @@ async function handleLine(room, line) {
     } else {
       send(`|/trn ${NAME},0,`); // local server without security
     }
+  } else if (cmd === 'updatesearch') {
+    try {
+      const s = JSON.parse(parts.slice(1).join('|'));
+      searchingNow = (s.searching ?? []).length > 0;
+      const games = s.games ? Object.keys(s.games).length : 0;
+      console.log(`search state: searching=${searchingNow} activeGames=${games} remaining=${searches}`);
+    } catch { /* ignore */ }
   } else if (cmd === 'popup' || cmd === 'nametaken') {
     console.error(`server says: |${cmd}|`, parts.slice(1).join('|').slice(0, 200));
     if (!loggedIn) process.exit(2);
@@ -410,6 +417,15 @@ async function handleLine(room, line) {
     }
   }
 }
+
+let searchingNow = false;
+// watchdog: heal dropped ladder searches (server restarts, races, cancellations)
+setInterval(() => {
+  if (loggedIn && searches > 0 && battles.size === 0 && !searchingNow) {
+    console.log('watchdog: no active search or battle - re-issuing /search');
+    send(`|/search ${FORMAT}`);
+  }
+}, 60000);
 
 ws.on('open', () => console.log(`connected to ${SERVER}`));
 ws.on('message', data => {
