@@ -11,6 +11,10 @@ cd "$(dirname "$0")/.."
 
 GAMES="${1:-10}"
 shift || true
+# credentials: env vars, or a local .ladder.env file (gitignored, chmod 600)
+#   PS_USER=name
+#   PS_PASS=password
+[ -f .ladder.env ] && set -a && . .ladder.env && set +a
 : "${PS_USER:?set PS_USER to the bot account name}"
 : "${PS_PASS:?set PS_PASS to the bot account password}"
 

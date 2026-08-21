@@ -17,3 +17,7 @@ __pycache__/
 /PLAN.md
 /data/traj/
 /runs/
+
+# ladder credentials (local only)
+/.ladder.env
+/logs/
