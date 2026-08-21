@@ -137,6 +137,31 @@
   .page::before { top: -14vmin; left: -12vmin; }
   .page::after { bottom: -16vmin; right: -12vmin; }
 
+  /* section color-block wipe — the opening's two-tone sweep, on every arrival */
+  .pwipe { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+  .pwipe::before, .pwipe::after { content: ""; position: absolute; inset: 0;
+    transform: translateX(calc(var(--dir, 1) * -102%)); }
+  .pwipe::before { background: var(--acc, var(--hot)); }
+  .pwipe::after { background: var(--accbg, var(--pinkbg)); }
+  .page:nth-child(even) .pwipe { --dir: -1; }
+  .page.wiping .pwipe::before { animation: pswipe .68s var(--snap) both; }
+  .page.wiping .pwipe::after { animation: pswipe .68s var(--snap) .09s both; }
+  @keyframes pswipe {
+    0% { transform: translateX(calc(var(--dir, 1) * -102%)); }
+    45%, 54% { transform: translateX(0); }
+    100% { transform: translateX(calc(var(--dir, 1) * 102%)); }
+  }
+
+  /* click star-burst */
+  .spk { position: fixed; z-index: 99; width: 11px; aspect-ratio: 1; pointer-events: none;
+    left: var(--x); top: var(--y); background: var(--c);
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    animation: spkfly .6s var(--snap) forwards; }
+  @keyframes spkfly {
+    from { transform: translate(-50%, -50%) scale(.4) rotate(0); opacity: 1; }
+    to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.1) rotate(170deg); opacity: 0; }
+  }
+
   html.js .st { opacity: 0; transform: translateY(36px);
     transition: opacity .65s var(--snap), transform .65s var(--snap);
     transition-delay: calc(var(--i, 0) * .1s); }
@@ -167,6 +192,8 @@
     background-size: 240% 100%; -webkit-background-clip: text; background-clip: text;
     color: transparent; animation: rbslide 7s linear infinite; }
   .hero-t { font-size: clamp(40px, 8.8vw, 92px); font-weight: 900; letter-spacing: .02em; margin-top: 16px; }
+  .ht-c { display: inline-block; transition: transform .3s var(--pop); transition-delay: calc(var(--i, 0) * .035s); }
+  .hero-t:hover .ht-c { transform: translateY(-.07em); }
   .hero-t .d { color: var(--hot); display: inline-block; }
   .page.in .hero-t .d { animation: nod .5s var(--pop) 1.5s; }
   @keyframes nod { 0%,100% { transform: none; } 40% { transform: translateY(-.14em); } 70% { transform: translateY(.04em); } }
@@ -189,6 +216,7 @@
   .ticker i:nth-of-type(5n+4) { animation-delay: .75s; }
   .ticker i:nth-of-type(5n) { animation-delay: 1s; }
   @keyframes beat { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.35); } }
+  .ticker:hover span { animation-play-state: paused; }
 
   /* ---------- section head ---------- */
   .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 30px; }
@@ -255,10 +283,13 @@
     border-radius: 8px; padding: 28px 10px 22px; }
   .num b { display: block; font-size: clamp(28px, 4.8vw, 44px); font-weight: 900; color: var(--c); }
   .num b small { font-size: .5em; }
+  .num { cursor: pointer; }
+  .num.bump { animation: bump .45s var(--pop); }
+  @keyframes bump { 40% { transform: translateY(-6px) scale(1.05); } }
   .num span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .2em; margin-top: 10px; }
 
   /* ---------- chart ---------- */
-  .chartbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 26px 22px 14px; }
+  .chartbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 26px 22px 14px; cursor: pointer; }
   .chartbox .cap { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .14em; margin-bottom: 12px; }
   .chartbox .cap i { font-style: normal; color: var(--acc); font-weight: 700; }
   svg.chart { width: 100%; height: auto; display: block; }
@@ -267,6 +298,7 @@
   .tline { fill: none; stroke: url(#rainbow); stroke-width: 3.5; stroke-linecap: round;
     stroke-dasharray: 100; stroke-dashoffset: 100; }
   .page.in .tline { transition: stroke-dashoffset 1.4s var(--snap) .35s; stroke-dashoffset: 0; }
+  .tline.redraw { transition: none !important; stroke-dashoffset: 100 !important; }
   .mkr { opacity: 0; transition: opacity .4s ease 1.5s; }
   .page.in .mkr { opacity: 1; }
 
@@ -387,11 +419,14 @@
 
   <main class="pages">
     <section class="page" id="hero">
+      <span class="pwipe"></span>
       <span class="fdeco star f1"></span><span class="fdeco plus f2"></span>
       <span class="fdeco maru f3"></span><span class="fdeco star m2 f4"></span><span class="fdeco plus m2 f5"></span>
       <div class="wrap">
         <p class="kicker st" style="--i:0">かわいくて、つよい。</p>
-        <h1 class="hero-t st" style="--i:1">猫耳は、最強<span class="d">。</span></h1>
+        <h1 class="hero-t st" style="--i:1"><span class="ht-c" style="--i:0">猫</span><span class="ht-c" style="--i:1">耳</span><span
+          class="ht-c" style="--i:2">は</span><span class="ht-c" style="--i:3">、</span><span class="ht-c" style="--i:4">最</span><span
+          class="ht-c" style="--i:5">強</span><span class="d ht-c" style="--i:6">。</span></h1>
         <p class="lead st" style="--i:2">ゲームがつよい猫耳を、まじめに研究しています。</p>
         <p class="stats-line st" style="--i:3"><i>毎秒 93万バトル</i> ・ <i>忠実度 1000／1000</i> ・ <i>ごほうびは ±1 のみ</i></p>
       </div>
@@ -402,6 +437,7 @@
     </section>
 
     <section class="page" id="news">
+      <span class="pwipe"></span>
       <span class="pgno">０２ ／ ０６</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>おしらせ</span></h2><small>NEWS</small></div>
@@ -414,6 +450,7 @@
     </section>
 
     <section class="page" id="research">
+      <span class="pwipe"></span>
       <span class="pgno">０３ ／ ０６</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>けんきゅう</span></h2><small>RESEARCH</small></div>
@@ -429,6 +466,7 @@
     </section>
 
     <section class="page" id="nums">
+      <span class="pwipe"></span>
       <span class="pgno">０４ ／ ０６</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>すうじで見る</span></h2><small>BY THE NUMBERS</small></div>
@@ -442,6 +480,7 @@
     </section>
 
     <section class="page" id="chart">
+      <span class="pwipe"></span>
       <span class="pgno">０５ ／ ０６</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>きろく</span></h2><small>TRAINING</small></div>
@@ -466,6 +505,7 @@
     </section>
 
     <section class="page" id="end">
+      <span class="pwipe"></span>
       <span class="pgno">０６ ／ ０６</span>
       <div class="wrap">
         <div class="st" style="--i:0"><svg class="mk" width="44" height="41"><use href="#earmark"/></svg></div>
@@ -491,8 +531,10 @@
       io = new IntersectionObserver(es => es.forEach(x => {
         if (!x.isIntersecting) return;
         const pg = x.target;
+        const wasCur = pg.classList.contains("cur");
         document.querySelectorAll(".page.cur").forEach(p => p.classList.remove("cur"));
         pg.classList.add("in", "cur");
+        if (!wasCur) { pg.classList.remove("wiping"); void pg.offsetWidth; pg.classList.add("wiping"); }
         document.querySelectorAll(".rail button").forEach(b => b.classList.toggle("cur", b.dataset.t === pg.id));
         document.querySelectorAll("nav .links a").forEach(a => a.classList.toggle("cur", a.getAttribute("href").slice(1) === pg.id));
         body.classList.toggle("atend", pg.id === "end");
@@ -525,7 +567,7 @@
       clearTimeout(ioTimer); clearTimeout(bootTimer);
       if (io) io.disconnect();
       body.classList.remove("skipped", "atend", "zapping");
-      document.querySelectorAll(".page").forEach(p => p.classList.remove("in", "cur"));
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("in", "cur", "wiping"));
       document.querySelectorAll("[data-cnt]").forEach(e => { delete e.dataset.done; e.textContent = "0"; });
       pages.scrollTo({ top: 0, behavior: "instant" });
       html.classList.add("boot");
@@ -546,6 +588,28 @@
         ev.preventDefault();
         navTo(el.dataset.t || el.getAttribute("href").slice(1));
       }));
+    /* click star-burst */
+    const spkCols = ["#ff4f87", "#3d9be9", "#8b7ae0", "#2fbfa0", "#ffb9cd"];
+    addEventListener("pointerdown", e => {
+      for (let i = 0; i < 6; i++) {
+        const s = document.createElement("i"); s.className = "spk";
+        const a = Math.random() * 6.283, r = 26 + Math.random() * 36;
+        s.style.cssText = `--x:${e.clientX}px;--y:${e.clientY}px;--dx:${Math.cos(a) * r}px;--dy:${Math.sin(a) * r}px;--c:${spkCols[i % 5]}`;
+        body.appendChild(s); setTimeout(() => s.remove(), 700);
+      }
+    });
+    /* stat tiles: click to re-count */
+    document.querySelectorAll(".num").forEach(n => n.addEventListener("click", () => {
+      n.classList.remove("bump"); void n.offsetWidth; n.classList.add("bump");
+      const c = n.querySelector("[data-cnt]");
+      if (c) { delete c.dataset.done; c.textContent = "0"; runCnt(c); }
+    }));
+    /* chart: click to redraw the line */
+    document.querySelector(".chartbox").addEventListener("click", () => {
+      const tl = document.querySelector(".tline");
+      tl.classList.add("redraw"); void tl.getBoundingClientRect(); tl.classList.remove("redraw");
+    });
+
     addEventListener("DOMContentLoaded", begin);
   </script>
 </body>
