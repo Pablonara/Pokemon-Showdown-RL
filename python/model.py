@@ -23,6 +23,7 @@ import torch.nn.functional as F
 N_ACTIONS = 10
 N_MON, MON_INTS, MON_FLOATS = 12, 6, 8
 CTX = 128
+EMBED_CHUNK = 16384  # SDPA batch-dim limit + autograd peak-memory cap (math is chunk-invariant)
 
 
 def _dex_tables():
@@ -169,9 +170,9 @@ class Model(nn.Module):
     def embed_step(self, ints, floats):
         """(B,80) ints, (B,160) floats -> (B,d)."""
         B = ints.shape[0]
-        if B > 32768:  # some SDPA kernels reject very large batch dims
-            return torch.cat([self.embed_step(ints[i:i + 32768], floats[i:i + 32768])
-                              for i in range(0, B, 32768)])
+        if B > EMBED_CHUNK:  # some SDPA kernels reject very large batch dims
+            return torch.cat([self.embed_step(ints[i:i + EMBED_CHUNK], floats[i:i + EMBED_CHUNK])
+                              for i in range(0, B, EMBED_CHUNK)])
         mi = ints[:, :72].view(-1, N_MON, MON_INTS).long()
         mf = floats[:, :96].view(-1, N_MON, MON_FLOATS)
         sp = mi[..., 0].clamp(0, 151)
