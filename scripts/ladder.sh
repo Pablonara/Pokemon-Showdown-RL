@@ -19,15 +19,28 @@ shift || true
 : "${PS_PASS:?set PS_PASS to the bot account password}"
 
 mkdir -p logs
+CKPT="${MODEL_CKPT:-runs/serving.pt}" # refresh_bot.sh keeps this at the newest run
 if ! pgrep -f "serve_mode[l]" > /dev/null; then
-  echo "starting model server (runs/latest_r6.pt, greedy)..."
-  nohup python3 python/serve_model.py runs/latest_r6.pt --greedy > logs/serve.log 2>&1 &
+  echo "starting model server ($CKPT, greedy)..."
+  nohup python3 python/serve_model.py "$CKPT" --greedy > logs/serve.log 2>&1 &
   sleep 8
 fi
 
 LOG="logs/ladder-$(date +%Y%m%d-%H%M%S).log"
 echo "laddering $GAMES games as $PS_USER -> $LOG"
-node scripts/showdown_bot.mjs \
-  --server wss://sim3.psim.us/showdown/websocket \
-  --name "$PS_USER" --pass "$PS_PASS" \
-  --search "$GAMES" --timer "$@" 2>&1 | tee "$LOG"
+# auto-resume: if the connection drops mid-session, replay only the remainder
+DONE=0
+TRIES=0
+while [ "$DONE" -lt "$GAMES" ] && [ "$TRIES" -lt 5 ]; do
+  node scripts/showdown_bot.mjs \
+    --server wss://sim3.psim.us/showdown/websocket \
+    --name "$PS_USER" --pass "$PS_PASS" \
+    --search "$((GAMES - DONE))" --timer "$@" 2>&1 | tee -a "$LOG" || true
+  DONE=$(grep -cE ": (win|tie)" "$LOG" || true)
+  TRIES=$((TRIES + 1))
+  if [ "$DONE" -lt "$GAMES" ]; then
+    echo "session interrupted ($DONE/$GAMES games done), resuming in 10s..."
+    sleep 10
+  fi
+done
+echo "session complete: $DONE/$GAMES games (see $LOG)"
