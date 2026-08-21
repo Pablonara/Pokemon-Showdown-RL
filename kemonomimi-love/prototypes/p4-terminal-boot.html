@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>04 ターミナル起動 — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Pattern-inspired by yui540 (MIT); no code copied. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8; --ink: #2a2a45;
+    --void: #14141c; --nsakura: #ff7aa2; --tmint: #7ff0c8;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif;
+    min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+
+  /* ---------- terminal (visible only during .play) ---------- */
+  .term { position: fixed; inset: 0; z-index: 10; background: var(--void); color: var(--tmint);
+    font-family: "JetBrains Mono", monospace; font-size: clamp(13px, 2.4vw, 17px); line-height: 2.1;
+    display: grid; place-content: center; opacity: 0; pointer-events: none; }
+  .play .term { animation: termLife 3.75s linear both; }
+  @keyframes termLife { 0% { opacity: 1; } 96% { opacity: 1; } 100% { opacity: 0; } }
+  .line { overflow: hidden; white-space: nowrap; width: 0; }
+  .play .line { animation: type .45s steps(24, end) both; animation-delay: var(--t); }
+  @keyframes type { from { width: 0; } to { width: var(--w); } }
+  .line .p { color: var(--nsakura); }
+  .line .ok { color: var(--sakura); }
+  .cursor::after { content: "▌"; animation: blink 1s steps(2, start) infinite; color: var(--nsakura); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- two-tone curtain: L -> R sweep from dark to pastel ---------- */
+  .veil { position: fixed; inset: 0; transform: translateX(-103%); pointer-events: none; }
+  .veil.mint   { background: var(--mint);   z-index: 21; }
+  .veil.sakura { background: var(--sakura); z-index: 20; }
+  .play .veil.mint   { animation: sweep 1.5s var(--snap) 3.0s both; }
+  .play .veil.sakura { animation: sweep 1.5s var(--snap) 3.12s both; }
+  @keyframes sweep {
+    0%   { transform: translateX(-103%); }
+    42%  { transform: translateX(0); }
+    58%  { transform: translateX(0); }
+    100% { transform: translateX(103%); }
+  }
+
+  /* ---------- hero (base = final) ---------- */
+  .hero { text-align: center; padding: 24px; }
+  .kicker { font-family: "JetBrains Mono", monospace; font-size: 9px; letter-spacing: .42em;
+    text-indent: .42em; color: var(--hot); margin-bottom: 18px; }
+  .hero h1 { font-size: clamp(40px, 9vw, 84px); font-weight: 900; }
+  .hero h1 .dot { color: var(--hot); }
+  .lead { font-size: clamp(13px, 2.2vw, 16px); letter-spacing: .16em; margin-top: 18px; }
+  .play .kicker { animation: rise .6s var(--snap) 3.8s both; }
+  .play .hero h1 { animation: rise .6s var(--snap) 3.9s both; }
+  .play .lead   { animation: rise .6s var(--snap) 4.05s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- JP furniture ---------- */
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; z-index: 5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; opacity: .45; z-index: 5; }
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 30; overflow: hidden;
+    display: grid; gap: 3px; justify-items: center; background: var(--cream);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 11px 20px 9px; cursor: pointer;
+    font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .replay .en { position: relative; font-family: "JetBrains Mono", monospace; font-size: 7.5px;
+    letter-spacing: .4em; text-indent: .4em; color: var(--hot); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--sakura);
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  .replay:hover::before { transform: translateX(0); }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="term">
+    <div>
+      <div class="line" style="--t:0.2s; --w:20ch"><span class="p">$</span> nyaa --boot gen1</div>
+      <div class="line" style="--t:0.8s; --w:30ch">loading libpkmn ......... <span class="ok">ok</span></div>
+      <div class="line" style="--t:1.5s; --w:30ch">battles/s ........... <span class="ok">930,000</span></div>
+      <div class="line" style="--t:2.2s; --w:30ch">belief head .......... <span class="ok">online</span></div>
+      <div class="line cursor" style="--t:2.8s; --w:26ch">かわいさ ............ <span class="ok">∞</span></div>
+    </div>
+  </div>
+
+  <div class="veil mint"></div>
+  <div class="veil sakura"></div>
+
+  <p class="deco-v">けもみみ研究所・二〇二五</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <main class="hero">
+    <p class="kicker">BOOT SEQUENCE COMPLETE</p>
+    <h1>猫耳、起動<span class="dot">。</span></h1>
+    <p class="lead">世界最速の環境で、猫耳を鍛えています。</p>
+  </main>
+
+  <button class="replay" onclick="replay()"><span class="jp">もういちど</span><span class="en">REPLAY</span></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

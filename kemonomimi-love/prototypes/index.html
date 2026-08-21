@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>オープニング試作集 — kemonomimi.love</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=DotGothic16&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8;
+    --lavender: #cdbbf5; --ink: #2a2a45;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif; padding: 64px 24px 96px; }
+  .wrap { max-width: 680px; margin: 0 auto; }
+
+  .kicker { font-family: "DotGothic16", monospace; font-size: 10px; letter-spacing: .42em; color: var(--hot); margin-bottom: 14px; }
+  h1 { font-weight: 900; font-size: 30px; letter-spacing: .06em; }
+  .lead { font-size: 13px; letter-spacing: .12em; margin-top: 12px; opacity: .75; }
+
+  .palette { display: flex; gap: 8px; margin: 26px 0 8px; }
+  .palette i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--ink); }
+
+  h2 { font-size: 15px; font-weight: 700; letter-spacing: .3em; margin: 34px 0 12px; }
+  h2 small { font-family: "DotGothic16", monospace; font-size: 9px; letter-spacing: .35em; color: var(--hot); margin-left: 12px; }
+
+  .cards { display: grid; gap: 0; border-top: 1px solid var(--ink); }
+  a.card { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px;
+    border: 1px solid var(--ink); border-top: none; background: #fff;
+    padding: 20px 22px; text-decoration: none; color: var(--ink); }
+  a.card::before { content: ""; position: absolute; inset: 0; background: var(--sweep, var(--sakura));
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  a.card:hover::before { transform: translateX(0); }
+  a.card > * { position: relative; }
+  .num { font-family: "DotGothic16", monospace; font-size: 11px; letter-spacing: .2em; color: var(--hot); }
+  .names b { display: block; font-size: 17px; font-weight: 700; letter-spacing: .1em; }
+  .names i { display: block; font-style: normal; font-family: "DotGothic16", monospace; font-size: 9.5px;
+    letter-spacing: .28em; opacity: .55; margin-top: 4px; }
+  .tag { margin-left: auto; font-size: 10px; letter-spacing: .18em; border: 1px solid var(--ink);
+    border-radius: 2px; padding: 5px 10px; white-space: nowrap; background: var(--cream); }
+  .arrow { transition: transform .3s var(--snap); }
+  a.card:hover .arrow { transform: translateX(6px); }
+
+  .note { margin-top: 40px; font-size: 12px; line-height: 2.1; letter-spacing: .06em;
+    background: #fff; border: 1px dashed var(--hot); border-radius: 2px; padding: 18px 20px; }
+  .note b { color: var(--hot); }
+
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-family: "DotGothic16", monospace;
+    font-size: 10px; letter-spacing: .3em; opacity: .45; }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } .tag { display: none; } }
+</style>
+</head>
+<body>
+  <p class="deco-v">けもみみ研究所・試作集</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <div class="wrap">
+    <p class="kicker">KEMONOMIMI.LOVE ／ OPENING PROTOTYPES</p>
+    <h1>オープニング試作集</h1>
+    <p class="lead">ぜんぶ再生して、すきなのを えらんでね。</p>
+
+    <div class="palette">
+      <i style="background:var(--cream)"></i><i style="background:var(--sakura)"></i><i style="background:var(--hot)"></i>
+      <i style="background:var(--mint)"></i><i style="background:var(--lavender)"></i><i style="background:var(--ink)"></i>
+    </div>
+
+    <h2>本流篇<small>MAINLINE</small></h2>
+    <div class="cards">
+      <a class="card" href="p1-neko-curtain.html"><span class="num">01</span><span class="names"><b>猫耳カーテン</b><i>NEKO CURTAIN</i></span><span class="tag">かわいい・発明枠</span><span class="arrow">→</span></a>
+      <a class="card" href="p2-petal-blinds.html"><span class="num">02</span><span class="names"><b>パステルブラインド</b><i>PASTEL BLINDS</i></span><span class="tag">JP標準・上品</span><span class="arrow">→</span></a>
+      <a class="card" href="p3-hanko.html"><span class="num">03</span><span class="names"><b>判子スタンプ</b><i>HANKO STAMP</i></span><span class="tag">和風・ドラマ</span><span class="arrow">→</span></a>
+      <a class="card" href="p4-terminal-boot.html"><span class="num">04</span><span class="names"><b>ターミナル起動</b><i>TERMINAL BOOT</i></span><span class="tag">TUFF・研究所</span><span class="arrow">→</span></a>
+      <a class="card" href="p5-paw-iris.html"><span class="num">05</span><span class="names"><b>肉球アイリス</b><i>PAW IRIS</i></span><span class="tag">レトロアニメ</span><span class="arrow">→</span></a>
+    </div>
+
+    <h2>テール篇<small>SAMPLED FROM THE TAILS</small></h2>
+    <div class="cards">
+      <a class="card" href="t1-purikura.html" style="--sweep:#ffd7e4"><span class="num">T1</span><span class="names"><b>プリクラ手帳</b><i>ハチマルポップ</i></span><span class="tag">平成ガーリー</span><span class="arrow">→</span></a>
+      <a class="card" href="t2-kenkyu-note.html" style="--sweep:#fff0a8"><span class="num">T2</span><span class="names"><b>研究ノート</b><i>クレーワン＋よもぎ</i></span><span class="tag">文房具・方眼</span><span class="arrow">→</span></a>
+      <a class="card" href="t3-pixel-battle.html" style="--sweep:#b8e8d8"><span class="num">T3</span><span class="names"><b>ドット絵バトル</b><i>ドットゴシック１６</i></span><span class="tag">レトロゲーム</span><span class="arrow">→</span></a>
+      <a class="card" href="t4-wafuu.html" style="--sweep:#f6c9d4"><span class="num">T4</span><span class="names"><b>和風・襖びらき</b><i>しっぽり明朝</i></span><span class="tag">縦書き・花びら</span><span class="arrow">→</span></a>
+    </div>
+
+    <p class="note">
+      <b>テール篇について：</b>「かわいいJP」の周辺ジャンルを4方向にサンプリングしました。
+      欧文フォントは不使用 — 数字も英字も、すべて日本語デザインフォント
+      （ハチマルポップ／クレーワン／よもぎ／ドットゴシック16／しっぽり明朝）が担当します。
+      アニメーションはすべて書き下ろし（yui540さんの思想のみ参考・コード未コピー）、
+      <b>prefers-reduced-motion</b> 対応、にゃ。
+    </p>
+  </div>
+</body>
+</html>

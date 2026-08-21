@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>T2 研究ノート — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Grid-notebook stationery genre study. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Yomogi&display=swap");
+  :root {
+    --paper: #fdfdf6; --grid: #d9e6f2; --grid2: #c4d8ea; --ink: #3a4256;
+    --hot: #ff5c8a; --sakura: #ffb7c5; --mint: #b8e8d8; --pen: #e8544f;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: "Klee One", cursive; color: var(--ink); min-height: 100vh; overflow-x: hidden;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid2) 1.2px, transparent 1.2px),
+      linear-gradient(90deg, var(--grid2) 1.2px, transparent 1.2px),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; }
+  body::before { content: ""; position: fixed; top: 0; bottom: 0; left: 64px; width: 2px;
+    background: rgba(255,92,138,.5); }
+
+  .page { max-width: 620px; margin: 0 auto; padding: 13vh 24px 120px 96px; position: relative; }
+
+  .date { font-family: "Yomogi", cursive; font-size: 14px; text-align: right; }
+  .play .date { animation: inkIn .5s var(--snap) .3s both; }
+
+  h1 { font-weight: 600; font-size: clamp(22px, 4.6vw, 34px); margin-top: 18px; line-height: 1.8; }
+  h1 .hl { background: linear-gradient(transparent 52%, rgba(255,183,197,.9) 52% 94%, transparent 94%)
+    no-repeat 0 0 / 0% 100%; }
+  .play h1 { animation: inkIn .6s var(--snap) .5s both; }
+  .play h1 .hl { animation: swipe .5s var(--snap) 1.15s both; }
+  @keyframes swipe { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+  @keyframes inkIn { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+
+  ul { list-style: none; margin-top: 30px; font-size: clamp(14px, 2.6vw, 17px); line-height: 2.6; }
+  li { position: relative; }
+  .play li { animation: inkIn .55s var(--snap) both; }
+  .play li:nth-child(1) { animation-delay: 1.5s; }
+  .play li:nth-child(2) { animation-delay: 1.8s; }
+  .play li:nth-child(3) { animation-delay: 2.1s; }
+  li small { font-family: "Yomogi", cursive; color: var(--pen); margin-left: 10px; }
+
+  /* red pen circle around ±1 */
+  .circled { position: relative; display: inline-block; padding: 0 4px; }
+  .circled svg { position: absolute; inset: -10px -12px; width: calc(100% + 24px); height: calc(100% + 20px);
+    overflow: visible; pointer-events: none; }
+  .circled path { fill: none; stroke: var(--pen); stroke-width: 2.4; stroke-linecap: round;
+    stroke-dasharray: 220; stroke-dashoffset: 220; }
+  .play .circled path { animation: draw .6s ease-out 2.5s both; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .margin-note { position: absolute; right: -8px; margin-top: -34px; font-family: "Yomogi", cursive;
+    color: var(--pen); font-size: 13px; transform: rotate(-4deg); }
+  .play .margin-note { animation: fadeIn .4s ease-out 2.9s both; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* sticky notes */
+  .fusen { position: absolute; padding: 14px 16px; font-family: "Yomogi", cursive; font-size: 13px;
+    line-height: 1.8; box-shadow: 2px 3px 8px rgba(58,66,86,.14); }
+  .fusen.todo { right: -18px; top: 38%; width: 150px; background: #fff6a8; transform: rotate(3deg); }
+  .fusen.nya  { left: -78px; top: 60%; background: var(--mint); transform: rotate(-5deg); }
+  .play .fusen { animation: flop .45s var(--pop) both; }
+  .play .fusen.todo { animation-delay: 3.1s; }
+  .play .fusen.nya  { animation-delay: 3.35s; }
+  @keyframes flop { from { opacity: 0; transform: scale(.7) rotate(12deg); } }
+
+  .cat { font-family: "Yomogi", cursive; margin-top: 44px; font-size: 15px; color: var(--ink); }
+  .play .cat { animation: fadeIn .5s ease-out 3.6s both; }
+
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 30;
+    font-family: "Klee One", cursive; font-weight: 600; font-size: 13px; color: var(--ink);
+    background: #fff6a8; border: none; padding: 14px 20px; cursor: pointer;
+    box-shadow: 2px 3px 8px rgba(58,66,86,.18); transform: rotate(-2deg);
+    transition: transform .2s var(--pop); }
+  .replay:hover { transform: rotate(0deg) scale(1.05); }
+  .replay small { display: block; font-family: "Yomogi", cursive; font-size: 10px; color: var(--pen); margin-top: 2px; }
+  @media (max-width: 860px) { .fusen.nya { display: none; } .fusen.todo { right: 0; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <p class="date">８月２１日（木）　はれ　☀</p>
+    <h1>研究ノート　その１<br>「<span class="hl">猫耳は、最強である</span>。」</h1>
+    <ul>
+      <li>・１びょうで ９３万かい たたかえる<small>← はやすぎ！</small></li>
+      <li>・シミュレータの ただしさ １０００／１０００<small>← かんぺき</small></li>
+      <li>・ごほうびは <span class="circled">かち まけ だけ<svg viewBox="0 0 120 44" preserveAspectRatio="none"><path d="M8 22 C 10 6, 96 2, 112 16 C 122 30, 74 44, 30 40 C 6 37, 2 28, 12 16"/></svg></span>
+        <span class="margin-note">← 漢気！えらい</span></li>
+    </ul>
+    <p class="cat">きょうの けもみみ：げんき　(=^･ω･^=)　つぎは Metamon に かつ。</p>
+    <span class="fusen todo">TODO：<br>Metamon を たおす！！</span>
+    <span class="fusen nya">にゃ</span>
+  </main>
+
+  <button class="replay" onclick="replay()">もういちど<small>かきなおす</small></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>05 肉球アイリス — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Pattern-inspired by yui540 (MIT); no code copied. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8; --ink: #2a2a45;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --c: 50% 55%; /* iris center */
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif;
+    min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+
+  /* ---------- hero (base = final) ---------- */
+  .hero { text-align: center; padding: 24px; }
+  .hero h1 { font-size: clamp(40px, 9vw, 84px); font-weight: 900; }
+  .hero h1 .dot { color: var(--hot); }
+  .lead { font-size: clamp(13px, 2.2vw, 16px); letter-spacing: .18em; margin-top: 18px; }
+  .caption { font-family: "JetBrains Mono", monospace; font-size: 8.5px; letter-spacing: .4em;
+    text-indent: .4em; color: var(--hot); margin-top: 14px; }
+  .play .hero h1  { animation: rise .6s var(--snap) 1.7s both; }
+  .play .lead     { animation: rise .6s var(--snap) 1.85s both; }
+  .play .caption  { animation: rise .6s var(--snap) 2.0s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- iris: overlays collapse to a point (retro episode-transition) ---------- */
+  .iris { position: fixed; inset: 0; pointer-events: none; clip-path: circle(0% at var(--c)); }
+  .iris.ink    { background: var(--ink);    z-index: 12; }
+  .iris.sakura { background: var(--sakura); z-index: 11; }
+  .play .iris.ink    { animation: irisClose 2.15s both; }
+  .play .iris.sakura { animation: irisCloseLate 2.3s both; }
+  @keyframes irisClose {
+    0%   { clip-path: circle(152% at var(--c)); }
+    44%  { clip-path: circle(152% at var(--c)); animation-timing-function: var(--snap); }
+    100% { clip-path: circle(0% at var(--c)); }
+  }
+  @keyframes irisCloseLate {
+    0%   { clip-path: circle(152% at var(--c)); }
+    50%  { clip-path: circle(152% at var(--c)); animation-timing-function: var(--snap); }
+    100% { clip-path: circle(0% at var(--c)); }
+  }
+
+  /* ---------- paw print pulse before the iris ---------- */
+  .paw { position: fixed; left: 50%; top: 55%; transform: translate(-50%, -50%); z-index: 13;
+    width: 110px; height: 100px; opacity: 0; pointer-events: none; }
+  .play .paw { animation: pawLife 1.2s ease-in-out both; }
+  @keyframes pawLife {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(.8); }
+    15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    40%  { transform: translate(-50%, -50%) scale(.94); }
+    65%  { transform: translate(-50%, -50%) scale(1.04); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(.85); }
+  }
+  .paw i { position: absolute; background: var(--sakura); border-radius: 50%; }
+  .paw .pad  { width: 58px; height: 46px; left: 26px; top: 48px; border-radius: 48% 48% 50% 50% / 60% 60% 42% 42%; }
+  .paw .t1 { width: 22px; height: 26px; left: 2px;  top: 22px; }
+  .paw .t2 { width: 22px; height: 28px; left: 28px; top: 4px; }
+  .paw .t3 { width: 22px; height: 28px; left: 58px; top: 4px; }
+  .paw .t4 { width: 22px; height: 26px; left: 84px; top: 22px; }
+
+  /* ---------- JP furniture ---------- */
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; z-index: 5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; opacity: .45; z-index: 5; }
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 30; overflow: hidden;
+    display: grid; gap: 3px; justify-items: center; background: var(--cream);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 11px 20px 9px; cursor: pointer;
+    font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .replay .en { position: relative; font-family: "JetBrains Mono", monospace; font-size: 7.5px;
+    letter-spacing: .4em; text-indent: .4em; color: var(--hot); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--sakura);
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  .replay:hover::before { transform: translateX(0); }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="iris ink"></div>
+  <div class="iris sakura"></div>
+  <div class="paw"><i class="t1"></i><i class="t2"></i><i class="t3"></i><i class="t4"></i><i class="pad"></i></div>
+
+  <p class="deco-v">けもみみ研究所・二〇二五</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <main class="hero">
+    <h1>けもみみ劇場<span class="dot">。</span></h1>
+    <p class="lead">だいいちわ「猫耳、ゲームがつよい」</p>
+    <p class="caption">EPISODE 01 — NYAA</p>
+  </main>
+
+  <button class="replay" onclick="replay()"><span class="jp">もういちど</span><span class="en">REPLAY</span></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

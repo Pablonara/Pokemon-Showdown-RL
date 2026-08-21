@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>T3 ドット絵バトル — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Retro handheld battle-UI genre study. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=DotGothic16&display=swap");
+  :root { --cream: #fff9f0; --ink: #2a2a45; --hot: #ff5c8a; --sakura: #ffb7c5; --mint: #7fd8b8; }
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: "DotGothic16", monospace; background: var(--cream); color: var(--ink);
+    min-height: 100vh; overflow: hidden; }
+
+  /* ---------- flash + chunky pixel wipe (steps easing = 8-bit soul) ---------- */
+  .fx { position: fixed; inset: 0; background: var(--ink); z-index: 40;
+    transform: translateX(103%); pointer-events: none; }
+  .play .fx { animation: flashWipe 1.5s steps(1, end) both; }
+  @keyframes flashWipe {
+    0%  { transform: translateX(0); opacity: 1; }
+    8%  { opacity: 0; }
+    16% { opacity: 1; }
+    24% { opacity: 0; }
+    32% { opacity: 1; transform: translateX(0); }
+    44% { transform: translateX(0); }
+    50% { transform: translateX(12.5%); }
+    56% { transform: translateX(25%); }
+    62% { transform: translateX(37.5%); }
+    68% { transform: translateX(50%); }
+    74% { transform: translateX(62.5%); }
+    80% { transform: translateX(75%); }
+    86% { transform: translateX(87.5%); }
+    92%, 100% { transform: translateX(103%); opacity: 1; }
+  }
+
+  .site-name { position: fixed; top: 22px; width: 100%; text-align: center;
+    font-size: 15px; letter-spacing: .3em; }
+  .play .site-name { animation: appear .1s steps(1) 1.5s both; }
+  @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ---------- enemy(?) status box ---------- */
+  .status { position: fixed; top: 14%; left: 8%; width: min(320px, 80vw);
+    background: #fff; border: 3px solid var(--ink); border-radius: 3px;
+    box-shadow: 4px 4px 0 rgba(42,42,69,.18); padding: 14px 16px; }
+  .play .status { animation: slideL .4s steps(6) 1.6s both; }
+  @keyframes slideL { from { transform: translateX(-130%); } to { transform: none; } }
+  .status .row { display: flex; justify-content: space-between; font-size: 15px; }
+  .hp { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; }
+  .hp .bar { flex: 1; height: 12px; border: 2px solid var(--ink); border-radius: 2px; padding: 1px; }
+  .hp .bar i { display: block; height: 100%; width: 87%; background: var(--mint); }
+  .play .hp .bar i { animation: fill 1.6s steps(12) 2.1s both; }
+  @keyframes fill { from { width: 0; } to { width: 87%; } }
+  .hp-num { text-align: right; font-size: 12px; margin-top: 6px; }
+  .play .hp-num { animation: appear .1s steps(1) 3.7s both; }
+
+  /* ---------- dialog box ---------- */
+  .dialog { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%);
+    width: min(680px, 92vw); background: #fff; border: 4px solid var(--ink); border-radius: 6px;
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--ink); padding: 20px 24px 22px;
+    font-size: clamp(14px, 2.6vw, 18px); line-height: 2; }
+  .play .dialog { animation: appear .1s steps(1) 1.55s both; }
+  .dialog p { overflow: hidden; white-space: nowrap; }
+  .play .dialog p { animation: reveal .8s steps(14) both; }
+  .play .dialog p:nth-child(1) { animation-delay: 1.75s; }
+  .play .dialog p:nth-child(2) { animation-delay: 2.75s; }
+  @keyframes reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  .dialog .next { position: absolute; right: 18px; bottom: 10px; color: var(--hot); }
+  .play .dialog .next { animation: blinky 1s steps(1) 3.8s infinite both; opacity: 0; }
+  @keyframes blinky { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+  /* ---------- command menu ---------- */
+  .menu { position: fixed; right: max(4vw, calc(50% - 340px)); bottom: calc(6vh + 118px);
+    background: #fff; border: 3px solid var(--ink); border-radius: 3px; padding: 12px 18px;
+    font-size: 15px; line-height: 2.1; box-shadow: 4px 4px 0 rgba(42,42,69,.18); }
+  .play .menu { animation: appear .1s steps(1) 3.6s both; }
+  .menu .sel::before { content: "▶ "; color: var(--hot); }
+  .menu .no { color: #b9b3c2; text-decoration: line-through; }
+  .menu .no::before { content: "　 "; }
+
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 50;
+    font-family: "DotGothic16", monospace; font-size: 13px; color: var(--ink);
+    background: #fff; border: 3px solid var(--ink); border-radius: 3px;
+    padding: 10px 16px; cursor: pointer; box-shadow: 3px 3px 0 rgba(42,42,69,.25); }
+  .replay:hover { background: var(--ink); color: var(--cream); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="fx"></div>
+
+  <p class="site-name">〜 けもみみ研究所 〜</p>
+
+  <div class="status">
+    <div class="row"><span>ケモミミ</span><span>Lv.99</span></div>
+    <div class="hp"><span>すすみぐあい</span><span class="bar"><i></i></span></div>
+    <p class="hp-num">87％ ／ もくひょう Metamon ごえ</p>
+  </div>
+
+  <div class="dialog">
+    <p>やせいの　ケモミミが　あらわれた！</p>
+    <p>ケモミミは　１びょうに　９３まんかい　たたかっている！</p>
+    <span class="next">▼</span>
+  </div>
+
+  <div class="menu">
+    <div class="sel">たたかう</div>
+    <div class="no">にげる（むり）</div>
+  </div>
+
+  <button class="replay" onclick="replay()">もういちど ▼</button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

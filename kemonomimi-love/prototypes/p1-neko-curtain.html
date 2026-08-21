@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>01 猫耳カーテン — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Pattern-inspired by yui540 (MIT); no code copied. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8; --ink: #2a2a45;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --ears: polygon(0 7%, 13% 7%, 21% 0, 29% 7%, 71% 7%, 79% 0, 87% 7%, 100% 7%, 100% 100%, 0 100%);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif;
+    min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+
+  /* ---------- hero (base state = final state) ---------- */
+  .hero { text-align: center; padding: 24px; }
+  .kicker { font-family: "JetBrains Mono", monospace; font-size: 9px; letter-spacing: .42em;
+    text-indent: .42em; color: var(--hot); margin-bottom: 18px; }
+  .hero h1 { font-size: clamp(40px, 9vw, 88px); font-weight: 900; letter-spacing: .02em; }
+  .hero h1 .dot { color: var(--hot); }
+  .lead { font-size: clamp(13px, 2.2vw, 16px); letter-spacing: .18em; margin-top: 18px; }
+  .stats { display: inline-block; margin-top: 26px; padding: 11px 8px;
+    border-top: 1px dashed var(--hot); border-bottom: 1px dashed var(--hot);
+    font-family: "JetBrains Mono", "Zen Maru Gothic", monospace; font-size: 10.5px; letter-spacing: .12em; }
+
+  /* ---------- cat-ear curtains: sweep bottom -> top, ears leading ---------- */
+  .veil { position: fixed; left: 0; top: -7.5vh; width: 100vw; height: 115vh;
+    clip-path: var(--ears); transform: translateY(103%); pointer-events: none; }
+  .veil.ink    { background: var(--ink);    z-index: 20; }
+  .veil.sakura { background: var(--sakura); z-index: 19; }
+  .play .veil        { animation: sweep 2.3s var(--snap) both; }
+  .play .veil.sakura { animation-delay: .14s; }
+  @keyframes sweep {
+    0%   { transform: translateY(103%); }
+    42%  { transform: translateY(0); }
+    58%  { transform: translateY(0); }
+    100% { transform: translateY(-103%); }
+  }
+
+  /* hero entrance after the curtain passes */
+  .play .kicker { animation: rise .65s var(--snap) 1.7s both; }
+  .play h1      { animation: rise .65s var(--snap) 1.8s both; }
+  .play .lead   { animation: rise .65s var(--snap) 1.95s both; }
+  .play .stats  { animation: rise .65s var(--snap) 2.1s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- JP furniture ---------- */
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; z-index: 5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; opacity: .45; z-index: 5; }
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 30; overflow: hidden;
+    display: grid; gap: 3px; justify-items: center; background: var(--cream);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 11px 20px 9px; cursor: pointer;
+    font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .replay .en { position: relative; font-family: "JetBrains Mono", monospace; font-size: 7.5px;
+    letter-spacing: .4em; text-indent: .4em; color: var(--hot); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--sakura);
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  .replay:hover::before { transform: translateX(0); }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="veil ink"></div>
+  <div class="veil sakura"></div>
+
+  <p class="deco-v">けもみみ研究所・二〇二五</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <main class="hero">
+    <p class="kicker">KEMONOMIMI RESEARCH DIVISION</p>
+    <h1>猫耳は、最強<span class="dot">。</span></h1>
+    <p class="lead">勝つために生まれた、猫耳たち。</p>
+    <p class="stats">930K battles/s ・ 忠実度 1000/1000 ・ 報酬は ±1 のみ</p>
+  </main>
+
+  <button class="replay" onclick="replay()"><span class="jp">もういちど</span><span class="en">REPLAY</span></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

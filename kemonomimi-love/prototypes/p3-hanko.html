@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>03 判子スタンプ — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Pattern-inspired by yui540 (MIT); no code copied. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8; --ink: #2a2a45;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot = the stamp slam */
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif;
+    min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+
+  .card { position: relative; text-align: center; padding: 40px; }
+  .play .card { animation: jolt .3s linear 1.32s; }
+  @keyframes jolt {
+    0%, 100% { transform: none; }
+    30% { transform: translate(2px, -2px) rotate(-0.5deg); }
+    60% { transform: translate(-2px, 2px) rotate(0.4deg); }
+  }
+
+  h1 { font-size: clamp(38px, 8.5vw, 80px); font-weight: 900; }
+  h1 span { display: inline-block; }
+  .play h1 span { animation: charUp .5s var(--snap) both; animation-delay: calc(0.15s + var(--i) * 0.07s); }
+  @keyframes charUp { from { opacity: 0; transform: translateY(.55em); } to { opacity: 1; transform: none; } }
+
+  .lead { font-size: clamp(13px, 2.2vw, 15px); letter-spacing: .16em; margin-top: 18px; }
+  .play .lead { animation: fade .6s var(--snap) 0.85s both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* JP long-arrow text link */
+  .cta { margin-top: 34px; }
+  .play .cta { animation: fade .6s var(--snap) 2.2s both; }
+  .cta a { display: inline-flex; align-items: center; gap: 14px; color: var(--ink); text-decoration: none;
+    font-size: 14px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .cta svg { overflow: visible; }
+  .cta svg path { stroke: var(--hot); }
+  .cta svg { transition: transform .3s var(--snap); }
+  .cta a:hover svg { transform: translateX(8px); }
+
+  /* ---------- the hanko: slams in with overshoot + impact ring ---------- */
+  .hanko { position: absolute; top: -30px; right: clamp(-6px, 2vw, 34px); width: 108px; aspect-ratio: 1;
+    border: 3.5px solid var(--hot); border-radius: 50%; display: grid; place-items: center;
+    color: var(--hot); font-weight: 900; font-size: 25px; line-height: 1.15;
+    writing-mode: vertical-rl; letter-spacing: .12em;
+    transform: rotate(-8deg); opacity: .92; }
+  .play .hanko { animation: slam .38s var(--pop) 1.25s both; }
+  @keyframes slam {
+    from { opacity: 0; transform: scale(2) rotate(-24deg); }
+    to   { opacity: .92; transform: scale(1) rotate(-8deg); }
+  }
+  .hanko::after { content: ""; position: absolute; inset: -14px; border: 2px solid var(--hot);
+    border-radius: 50%; opacity: 0; }
+  .play .hanko::after { animation: ring .55s ease-out 1.38s both; }
+  @keyframes ring { from { opacity: .8; transform: scale(.75); } to { opacity: 0; transform: scale(1.25); } }
+
+  /* ---------- JP furniture ---------- */
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; z-index: 5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-family: "JetBrains Mono", monospace;
+    font-size: 9px; letter-spacing: .3em; opacity: .45; z-index: 5; }
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 30; overflow: hidden;
+    display: grid; gap: 3px; justify-items: center; background: var(--cream);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 11px 20px 9px; cursor: pointer;
+    font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .replay .en { position: relative; font-family: "JetBrains Mono", monospace; font-size: 7.5px;
+    letter-spacing: .4em; text-indent: .4em; color: var(--hot); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--sakura);
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  .replay:hover::before { transform: translateX(0); }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <p class="deco-v">けもみみ研究所・二〇二五</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <main class="card">
+    <h1>
+      <span style="--i:0">猫</span><span style="--i:1">耳</span><span style="--i:2">は</span><span
+      style="--i:3">、</span><span style="--i:4">最</span><span style="--i:5">強</span><span style="--i:6">。</span>
+    </h1>
+    <p class="lead">ゲームがつよい猫耳を、まじめに研究しています。</p>
+    <div class="hanko">猫耳認定</div>
+    <p class="cta"><a href="#">研究をみる<svg width="58" height="8" viewBox="0 0 58 8" fill="none"><path d="M0 7h56M56 7 49.5 1" stroke-width="1.2"/></svg></a></p>
+  </main>
+
+  <button class="replay" onclick="replay()"><span class="jp">もういちど</span><span class="en">REPLAY</span></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>
