@@ -518,7 +518,8 @@ def main():
             # plasticity tripwire: are the obs-v3 feature columns being used?
             # (mon block cols 8..13 = maxhp+usage; global cols 59..65 = events)
             "surgery/new_col_norm": float(
-                model.mon_in.weight[:, -5:].norm() + model.global_in.weight[:, 59:65].norm()),
+                (model.mon_in.weight[:, -5:].norm()
+                 + model.global_in.weight[:, 59:65].norm()).detach()),
         }
         msg = (f"it {it} rows {slab.ptr} ({metrics['rows_per_s']:.0f}/s) "
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "
