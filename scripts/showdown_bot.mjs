@@ -49,17 +49,27 @@ const VOLMAP = { // protocol effect name -> volatile key
   transform: 'transform',
 };
 
+const SPECIES_STATS = new Map(Object.entries(DATA.species).map(([n, s]) => [+n, s.stats]));
+// gen1 max-HP estimate (modern PS formula) for opponents; randbats spreads are
+// ev 255 -> 63, iv 30, modulo small tweak sets (error <= 2 HP)
+const estMaxHP = (speciesNum, level) => {
+  const base = SPECIES_STATS.get(speciesNum)?.[0] ?? 100;
+  return Math.floor((2 * base + 30 + 63 + 100) * level / 100) + 10;
+};
+
 class Battle {
   constructor(room, mySide) {
     this.room = room;
     this.my = mySide; // 'p1'|'p2'
     this.request = null;
-    this.opp = []; // [{num, level, hp, status, sleepBit, moves:Set, active}]
+    this.opp = []; // [{num, level, hp, status, moves:Map(num->uses), active}]
+    this.myUsage = new Map(); // speciesNum -> Map(moveNum -> uses)
     this.boosts = {p1: {}, p2: {}};
     this.vols = {p1: {}, p2: {}};
     this.lastUsed = {p1: 0, p2: 0};
     this.turn = 0;
-    this.myStatusExtra = new Map(); // ident -> slp bit tracking
+    // last-move event flags since my last decision: [attempted, missed, crit]
+    this.events = {p1: [0, 0, 0], p2: [0, 0, 0]};
   }
 
   oppActive() {
@@ -87,16 +97,35 @@ class Battle {
         let mon = this.opp.find(m => m.num === specNum);
         if (!mon) {
           const level = +(rest[1].match(/, L(\d+)/)?.[1] ?? 100);
-          mon = {num: specNum, level, hp: 1, status: 0, moves: new Set(), active: false};
+          mon = {num: specNum, level, hp: 1, status: 0, moves: new Map(), active: false};
           this.opp.push(mon);
         }
         mon.active = true;
         mon.hp = parseHP(rest[2], mon.hp);
         break;
       }
-      case 'move':
-        this.lastUsed[side] = MOVES.get(norm(rest[1])) ?? 0;
-        if (!mine) this.oppActive()?.moves.add(this.lastUsed[side]);
+      case 'move': {
+        const mv = MOVES.get(norm(rest[1])) ?? 0;
+        this.lastUsed[side] = mv;
+        this.events[side][0] = 1;
+        if (/\[miss\]/.test(parts.join('|'))) this.events[side][1] = 1;
+        if (!mine) {
+          const am = this.oppActive();
+          if (am) am.moves.set(mv, (am.moves.get(mv) ?? 0) + 1);
+        } else {
+          const sp = SPECIES.get(norm(
+            this.request?.side.pokemon.find(p => p.active)?.details.split(',')[0] ?? '')) ?? 0;
+          if (!this.myUsage.has(sp)) this.myUsage.set(sp, new Map());
+          const u = this.myUsage.get(sp);
+          u.set(mv, (u.get(mv) ?? 0) + 1);
+        }
+        break;
+      }
+      case '-miss':
+        this.events[side][1] = 1; // ident = attacker
+        break;
+      case '-crit':
+        this.events[side === 'p1' ? 'p2' : 'p1'][2] = 1; // ident = defender
         break;
       case '-damage': case '-heal': case '-sethp':
         if (!mine && this.oppActive()) this.oppActive().hp = parseHP(rest[1], this.oppActive().hp);
@@ -140,17 +169,19 @@ class Battle {
     }
   }
 
-  /** obs layout v1 (see env/src/main.zig); returns {ints, floats, mask, acts} */
+  /** obs layout v3 (see env/src/main.zig); returns {ints, floats, mask, acts} */
   encode() {
+    const MON_F = 13;
     const req = this.request;
     const ints = new Int32Array(80);
-    const floats = new Float32Array(160);
+    const floats = new Float32Array(224);
     // own side (blocks 0-5) from request
     req.side.pokemon.forEach((p, j) => {
       if (j >= 6) return;
       const ii = j * 6;
-      const fi = j * 8;
-      ints[ii] = SPECIES.get(norm(p.details.split(',')[0])) ?? 0;
+      const fi = j * MON_F;
+      const spNum = SPECIES.get(norm(p.details.split(',')[0])) ?? 0;
+      ints[ii] = spNum;
       const [hp, status] = parseCondition(p.condition);
       ints[ii + 1] = status;
       (p.moves ?? []).forEach((mv, k) => {
@@ -162,6 +193,14 @@ class Battle {
       floats[fi + 3] = 1;
       // pp only present on the active request block; approximate bench pp as full
       floats[fi + 4] = floats[fi + 5] = floats[fi + 6] = floats[fi + 7] = 1;
+      // max hp: exact from own absolute condition string (e.g. "282/282")
+      const abs = p.condition.match(/\/(\d+)/);
+      floats[fi + 8] = (abs ? +abs[1] : estMaxHP(spNum,
+        +(p.details.match(/, L(\d+)/)?.[1] ?? 100))) / 1000;
+      const use = this.myUsage.get(spNum);
+      (p.moves ?? []).forEach((mv, k) => {
+        if (k < 4) floats[fi + 9 + k] = Math.min(1, (use?.get(MOVES.get(norm(mv)) ?? 0) ?? 0) / 16);
+      });
     });
     if (req.active?.[0]?.moves) {
       req.active[0].moves.forEach((m, k) => {
@@ -173,19 +212,23 @@ class Battle {
     opp.forEach((m, j) => {
       if (j >= 6) return;
       const ii = (6 + j) * 6;
-      const fi = (6 + j) * 8;
+      const fi = (6 + j) * MON_F;
       ints[ii] = m.num;
       ints[ii + 1] = m.status;
-      [...m.moves].forEach((mv, k) => {
-        if (k < 4) ints[ii + 2 + k] = mv;
+      [...m.moves.keys()].forEach((mv, k) => {
+        if (k < 4) {
+          ints[ii + 2 + k] = mv;
+          floats[fi + 9 + k] = Math.min(1, (m.moves.get(mv) ?? 0) / 16);
+        }
       });
       floats[fi] = m.hp;
       floats[fi + 1] = m.level / 100;
       floats[fi + 2] = m.active ? 1 : 0;
       floats[fi + 3] = 1;
+      floats[fi + 8] = estMaxHP(m.num, m.level) / 1000; // public-computable
     });
-    for (let j = this.opp.length; j < 6; j++) floats[(6 + j) * 8] = 1.0; // unrevealed: full hp
-    // extras
+    for (let j = this.opp.length; j < 6; j++) floats[(6 + j) * MON_F] = 1.0; // unrevealed: full hp
+    // extras (v3 offsets: base 156)
     const other = this.my === 'p1' ? 'p2' : 'p1';
     const BOOST_ORDER = ['atk', 'def', 'spe', 'spa', 'accuracy', 'evasion'];
     [[0, this.my], [1, other]].forEach(([k, s]) => {
@@ -197,10 +240,10 @@ class Battle {
       let raw = 0;
       BOOST_ORDER.forEach((b, i) => {
         const val = this.boosts[s][b] ?? 0;
-        floats[96 + k * 24 + i] = val / 6;
+        floats[156 + k * 24 + i] = val / 6;
         raw |= (val & 0xf) << (i * 4);
       });
-      for (let i = 0; i < 18; i++) floats[96 + k * 24 + 6 + i] = (bits >> i) & 1;
+      for (let i = 0; i < 18; i++) floats[156 + k * 24 + 6 + i] = (bits >> i) & 1;
       ints[74 + k * 3] = raw;
       ints[76 + k * 3] = this.lastUsed[s];
     });
@@ -210,11 +253,17 @@ class Battle {
     if (a?.stats) {
       const table = x => (x >= 0 ? (2 + x) / 2 : 2 / (2 - x));
       ['atk', 'def', 'spe', 'spa'].forEach((st, i) => {
-        floats[145 + i] = Math.min(999, (a.stats[st] ?? 0)
+        floats[205 + i] = Math.min(999, (a.stats[st] ?? 0)
           * table(this.boosts[this.my][st] ?? 0)) / 1000;
       });
     }
-    floats[154] = this.turn / 500;
+    floats[214] = this.turn / 500;
+    // last-move event flags [attempted, missed, crit]: mine then theirs
+    for (let e = 0; e < 3; e++) {
+      floats[215 + e] = this.events[this.my][e];
+      floats[218 + e] = this.events[other][e];
+    }
+    this.events = {p1: [0, 0, 0], p2: [0, 0, 0]}; // consumed by this decision
 
     // legal actions (mirrors env action space)
     const acts = [];
