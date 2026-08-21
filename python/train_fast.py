@@ -100,6 +100,8 @@ class Opponents:
         self.pool = [("maxdmg", MaxDamagePolicy()), ("random", RandomPolicy(7))]
         self.wr = np.full(len(self.pool), 0.5)  # learner winrate EMA per opponent
         self.self_share = args.self_share
+        self.hot_frac = getattr(args, "hot_frac", 0.0)
+        self.hot = np.zeros(n_envs, bool)
         self.opp = np.full(n_envs, -1, dtype=np.int64)
         self.frozen = None
         self.block = np.zeros(n_envs, dtype=bool)
@@ -126,12 +128,16 @@ class Opponents:
     def resample(self, i):
         if self.block[i]:
             self.opp[i] = 100  # frozen block marker
+            self.hot[i] = False
             return
         if np.random.random() < self.self_share:
             self.opp[i] = -1
+            # hot lane: some mirror games sample at high temperature to widen
+            # the visited-state distribution (IS-corrected via stored logp)
+            self.hot[i] = np.random.random() < self.hot_frac
             return
-        w = 1.05 - self.wr
-        self.opp[i] = np.random.choice(len(self.pool), p=w / w.sum())
+        self.opp[i] = np.random.choice(len(self.pool), p=(w := 1.05 - self.wr) / w.sum())
+        self.hot[i] = False
 
     def record(self, i, learner_reward):
         win = float(learner_reward > 0)
@@ -177,6 +183,7 @@ class Opponents:
     def metrics(self):
         m = {f"league/wr_{name}": self.wr[k] for k, (name, _) in enumerate(self.pool)}
         m["league/mirror_frac"] = float((self.opp == -1).mean())
+        m["league/hot_frac"] = float(self.hot.mean())
         if self.frozen is not None:
             m["league/wr_frozen"] = self.wr_frozen
         return m
@@ -232,7 +239,7 @@ def main():
     ap.add_argument("--iters", type=int, default=2000)
     ap.add_argument("--envs", type=int, default=4096)
     ap.add_argument("--rows", type=int, default=131072)
-    ap.add_argument("--token-budget", type=int, default=32768)
+    ap.add_argument("--token-budget", type=int, default=65536)
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--clip", type=float, default=0.2)
@@ -248,6 +255,9 @@ def main():
     ap.add_argument("--anchor-kl", type=float, default=0.02)
     ap.add_argument("--anchor-every", type=int, default=150)
     ap.add_argument("--dmg", type=float, default=1.0, help="damage-prediction aux weight")
+    ap.add_argument("--hot-frac", type=float, default=0.15,
+                    help="fraction of mirror envs sampled at high temperature (state diversity)")
+    ap.add_argument("--hot-temp", type=float, default=1.5)
     ap.add_argument("--dex-feats", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--eval-every", type=int, default=25)
     ap.add_argument("--d", type=int, default=384)
@@ -326,7 +336,11 @@ def main():
                     idx = torch.from_numpy(rows).to(device)
                     h = model.step(torch.from_numpy(mi).to(device),
                                    torch.from_numpy(mf).to(device), cache, idx)
-                    dist = masked_dist(model.pi(h), torch.from_numpy(mk).to(device))
+                    logits = model.pi(h)
+                    if args.hot_frac > 0:
+                        hot = torch.from_numpy(opps.hot[rows // 2]).to(device)
+                        logits = logits / torch.where(hot, args.hot_temp, 1.0)[:, None]
+                    dist = masked_dist(logits, torch.from_numpy(mk).to(device))
                     acts_t = dist.sample()
                     logp = dist.log_prob(acts_t).cpu().numpy()
                     acts = acts_t.cpu().numpy()
@@ -377,10 +391,12 @@ def main():
             continue
         n_rows = sum(len(e["act"]) for e in eps)
         batches = batches_of(eps, args.token_budget)
+        # pad once, reuse for the value pre-pass and every epoch (we are
+        # overhead-bound, not FLOPs-bound; re-padding per epoch dominated)
+        padded = [pad_batch(b, device) for b in batches]
 
         with torch.no_grad():
-            for batch in batches:
-                t, lens, ret, valid = pad_batch(batch, device)
+            for batch, (t, lens, ret, valid) in zip(batches, padded):
                 with autocast():
                     emb = model.embed_step(t["mi"].view(-1, 80), t["mf"].view(-1, 160))
                     h = model.forward_seq(emb.view(len(batch), -1, model.d), lens)
@@ -391,23 +407,22 @@ def main():
                     e["vtarget"] = (e["adv"] + val[b, :T]).astype(np.float32)
         all_adv = np.concatenate([e["adv"] for e in eps])
         mu, sd = all_adv.mean(), all_adv.std() + 1e-8
-        for e in eps:
-            e["adv"] = ((e["adv"] - mu) / sd).astype(np.float32)
+        for batch, (t, lens, ret, valid) in zip(batches, padded):
+            t["adv"] = torch.zeros_like(t["logp"])
+            t["vtarget"] = torch.zeros_like(t["logp"])
+            for b, e in enumerate(batch):
+                T = len(e["act"])
+                t["adv"][b, :T] = torch.from_numpy((e["adv"] - mu) / sd).to(device)
+                t["vtarget"][b, :T] = torch.from_numpy(e["vtarget"]).to(device)
 
         model.train()
         agg = dict(pg=0.0, vf=0.0, ent=0.0, kl=0.0, sp=0.0, mv=0.0, spacc=0.0, nb=0)
         t_train = time.time()
         for _ in range(args.epochs):
-            order = np.random.permutation(len(batches))
+            order = np.random.permutation(len(padded))
             for bi in order:
-                batch = batches[bi]
-                t, lens, ret, valid = pad_batch(batch, device)
-                adv = torch.zeros_like(t["logp"])
-                vtarget = torch.zeros_like(t["logp"])
-                for b, e in enumerate(batch):
-                    T = len(e["act"])
-                    adv[b, :T] = torch.from_numpy(e["adv"]).to(device)
-                    vtarget[b, :T] = torch.from_numpy(e["vtarget"]).to(device)
+                t, lens, ret, valid = padded[bi]
+                adv, vtarget = t["adv"], t["vtarget"]
                 B, T = t["act"].shape
                 nvalid = valid.sum().clamp(min=1)
                 with autocast():
