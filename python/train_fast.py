@@ -368,7 +368,7 @@ def main():
                 slab.a["mf"][sl] = mf
                 slab.a["sp"][sl] = opp[:, :, 0]
                 slab.a["mv"][sl] = opp[:, :, 2:6].reshape(k, 24)
-                slab.a["rev"][sl] = mf[:, 48:96].reshape(k, 6, 8)[:, :, 3]
+                slab.a["rev"][sl] = mf[:, 78:156].reshape(k, 6, 13)[:, :, 3]  # v3 layout
                 slab.a["mask"][sl] = mk
                 slab.a["act"][sl] = acts
                 slab.a["logp"][sl] = logp
@@ -479,7 +479,7 @@ def main():
                                      ignore_index=0)
                 # damage aux: next-step hp_frac deltas of both actives; only
                 # where t+1 is valid and neither active switched
-                hp_me, hp_them = t["mf"][:, :, 0], t["mf"][:, :, 48]
+                hp_me, hp_them = t["mf"][:, :, 0], t["mf"][:, :, 78]  # v3: their active block @78
                 same = ((t["mi"][:, 1:, 0] == t["mi"][:, :-1, 0])
                         & (t["mi"][:, 1:, 36] == t["mi"][:, :-1, 36])
                         & valid[:, 1:])
