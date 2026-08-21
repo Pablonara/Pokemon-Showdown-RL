@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ロゴ実験室 — kemonomimi.love</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap");
+  :root { --paper: #fafbfd; --panel: #fff; --ink: #202339; --hot: #ff4f87;
+    --line: rgba(32,35,57,.16); --snap: cubic-bezier(.8,.05,.1,.98); }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif; padding: 64px 24px 96px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .kicker { font-size: 10px; font-weight: 700; letter-spacing: .42em; color: var(--hot); margin-bottom: 14px; }
+  h1 { font-weight: 900; font-size: 30px; letter-spacing: .06em; }
+  .lead { font-size: 13px; letter-spacing: .12em; margin-top: 12px; opacity: .75; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 36px; }
+  .vcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px 20px 18px; }
+  .vcard:hover { border-color: var(--hot); }
+  .big { display: grid; place-items: center; height: 96px; color: var(--hot); }
+  .lockup { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 12px;
+    color: var(--hot); border-top: 1px dashed var(--line); padding-top: 14px; }
+  .lockup b { color: var(--ink); font-size: 14px; letter-spacing: .12em; }
+  .row2 { display: flex; gap: 10px; margin-top: 12px; }
+  .tiny { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--paper);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; color: var(--hot); }
+  .tiny span { font-size: 9.5px; letter-spacing: .1em; opacity: .6; color: var(--ink); }
+  .dark { width: 64px; display: grid; place-items: center; background: var(--ink);
+    border-radius: 6px; color: var(--hot); }
+  .nm { margin-top: 14px; font-size: 13px; font-weight: 700; letter-spacing: .14em; }
+  .rec { font-size: 9px; background: var(--hot); color: #fff; border-radius: 999px; padding: 2px 8px;
+    margin-left: 8px; letter-spacing: .18em; vertical-align: 2px; }
+  .memo { margin-top: 6px; font-size: 11.5px; line-height: 1.9; opacity: .7; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <symbol id="v1" viewBox="0 0 64 60">
+      <path d="M14 26 L8 6 L27 15 Z" stroke="currentColor" stroke-width="6" stroke-linejoin="round" fill="currentColor"/>
+      <path d="M50 26 L56 6 L37 15 Z" stroke="currentColor" stroke-width="6" stroke-linejoin="round" fill="currentColor"/>
+      <circle cx="32" cy="36" r="22" fill="currentColor"/>
+    </symbol>
+    <symbol id="v2" viewBox="0 0 64 56">
+      <path fill="currentColor" d="M11 28 C5 34 5 46 14 50 C22 54.5 42 54.5 50 50 C59 46 59 34 53 28
+        L56.5 8 Q57 4 53.5 5.8 L40 12.3 Q32 10 24 12.3 L10.5 5.8 Q7 4 7.5 8 Z"/>
+    </symbol>
+    <symbol id="v3" viewBox="0 0 64 56">
+      <path d="M19 26 L14 7.5 L30 17.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <path d="M45 26 L50 7.5 L34 17.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <circle cx="32" cy="38" r="12.5" stroke="currentColor" stroke-width="6" fill="none"/>
+    </symbol>
+    <symbol id="v4" viewBox="0 0 64 56">
+      <path d="M19 27 L14 8.5 L30 18.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <path d="M45 27 L50 8.5 L34 18.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <circle cx="32" cy="40" r="11.5" fill="currentColor"/>
+    </symbol>
+    <symbol id="v5" viewBox="0 0 64 56">
+      <path d="M15.5 21 L10.5 4.5 L28 12.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <path d="M48.5 21 L53.5 4.5 L36 12.5 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <rect x="10" y="17" width="44" height="35" rx="12" fill="currentColor"/>
+    </symbol>
+    <symbol id="v6" viewBox="0 0 64 56">
+      <circle cx="13.5" cy="23" r="6.8" fill="currentColor"/>
+      <circle cx="32" cy="16.5" r="6.8" fill="currentColor"/>
+      <circle cx="50.5" cy="23" r="6.8" fill="currentColor"/>
+      <path fill="currentColor" d="M32 27 C42.5 27 47.5 33 46.5 40 C45.4 47.3 38.5 50 32 50
+        C25.5 50 18.6 47.3 17.5 40 C16.5 33 21.5 27 32 27 Z"/>
+    </symbol>
+    <symbol id="v7" viewBox="0 0 64 56">
+      <path d="M14.5 36 L10 13 L28 27 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <path d="M49.5 36 L54 13 L36 27 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="currentColor"/>
+      <rect x="8" y="36" width="48" height="9.5" rx="4.75" fill="currentColor"/>
+    </symbol>
+  </defs></svg>
+
+  <div class="wrap">
+    <p class="kicker">KEMONOMIMI.LOVE ／ MARK LABORATORY</p>
+    <h1>ロゴ実験室</h1>
+    <p class="lead">おおきく・ワードマーク・favicon・ダーク。ぜんぶの場面で見て、えらんでね。</p>
+
+    <div class="grid">
+      <div class="vcard">
+        <div class="big"><svg width="72" height="67"><use href="#v1"/></svg></div>
+        <div class="lockup"><svg width="24" height="22"><use href="#v1"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="15"><use href="#v1"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="33"><use href="#v1"/></svg></div></div>
+        <p class="nm">０１・いまの</p><p class="memo">三角パーツ＋丸。部品感があって、すこしバラバラに見える（現行）。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="76" height="66"><use href="#v2"/></svg></div>
+        <div class="lockup"><svg width="26" height="23"><use href="#v2"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v2"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="38" height="33"><use href="#v2"/></svg></div></div>
+        <p class="nm">０２・ひとふで<span class="rec">おすすめ</span></p><p class="memo">頭と耳がひと筆の輪郭。いちばん「ロゴ」として完成度が高い。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="72" height="63"><use href="#v3"/></svg></div>
+        <div class="lockup"><svg width="24" height="21"><use href="#v3"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v3"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="32"><use href="#v3"/></svg></div></div>
+        <p class="nm">０３・まる。<span class="rec">概念派</span></p><p class="memo">句点「。」に耳。ブランド文「猫耳は、最強。」と直結する仕掛け。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="72" height="63"><use href="#v4"/></svg></div>
+        <div class="lockup"><svg width="24" height="21"><use href="#v4"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v4"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="32"><use href="#v4"/></svg></div></div>
+        <p class="nm">０４・てん</p><p class="memo">塗りの点＋浮いた耳。ミニマル。小サイズでの視認性がとても良い。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="72" height="63"><use href="#v5"/></svg></div>
+        <div class="lockup"><svg width="24" height="21"><use href="#v5"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v5"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="32"><use href="#v5"/></svg></div></div>
+        <p class="nm">０５・しかく</p><p class="memo">角丸スクエア＋耳。アプリアイコンにそのまま使える形。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="72" height="63"><use href="#v6"/></svg></div>
+        <div class="lockup"><svg width="24" height="21"><use href="#v6"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v6"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="32"><use href="#v6"/></svg></div></div>
+        <p class="nm">０６・にくきゅう</p><p class="memo">肉球。かわいさ最大。ただし「耳」ブランドからは少し離れる。</p>
+      </div>
+
+      <div class="vcard">
+        <div class="big"><svg width="72" height="63"><use href="#v7"/></svg></div>
+        <div class="lockup"><svg width="24" height="21"><use href="#v7"/></svg><b>けもみみ研究所</b></div>
+        <div class="row2"><div class="tiny"><svg width="16" height="14"><use href="#v7"/></svg><span>favicon 16px</span></div><div class="dark"><svg width="36" height="32"><use href="#v7"/></svg></div></div>
+        <p class="nm">０７・やま</p><p class="memo">耳＋バーの抽象マーク。ヘッダーの区切りやローディングにも流用可。</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

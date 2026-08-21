@@ -39,10 +39,15 @@ const Choice = pkmn.Choice;
 const Player = pkmn.Player;
 const Result = pkmn.Result;
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const N_ACTIONS: u32 = 10;
 pub const INTS_PER_PLAYER: u32 = 80;
-pub const FLOATS_PER_PLAYER: u32 = 160;
+// obs v3: 12 mons x 13 floats [hp, level, active, revealed, pp1-4, maxhp/1000,
+// used1-4/16] = 156, + extras [boosts 6 + volatile flags 18] x2 = 48,
+// + [sleep counter + 4 modified stats] x2 = 10, + turn = 1, + last-move event
+// flags [attempted, missed, crit] mine/theirs = 6, + pad = 224
+pub const FLOATS_PER_PLAYER: u32 = 224;
+const MON_F: usize = 13;
 const MAX_TURNS: u16 = 1000; // Endless Battle Clause surrogate: draw
 const ACTION_SPECIAL: i32 = 9; // engine `move 0`: locked move / Struggle
 
@@ -140,8 +145,16 @@ const EnvState = struct {
     result: Result,
     battle_idx: u64, // global battle counter (teams 2k, 2k+1; seed f(env_seed, k))
     revealed: [2][6]bool, // by original party index (order-invariant)
-    moves_used: [2][6][4]bool,
+    usage: [2][6][4]u8, // move selection counts (masking: >0 = revealed)
+    events: [2][3]bool, // per player since last expose: [attempted, missed, crit]
+    last_move_side: u8, // walker state for LastMiss attribution (2 = none)
 };
+
+const OptsT = @TypeOf(pkmn.battle.options(
+    @as(pkmn.protocol.FixedLog, undefined),
+    pkmn.gen1.chance.NULL,
+    pkmn.gen1.calc.NULL,
+));
 
 pub const Env = struct {
     alloc: std.mem.Allocator,
@@ -150,6 +163,9 @@ pub const Env = struct {
     seed: u64,
     next_battle: u64,
     states: []EnvState,
+    log_buf: [pkmn.LOGS_SIZE]u8,
+    writer: pkmn.protocol.Writer,
+    opts: OptsT,
     // exposed buffers (Python views these; layout must match gen1env.py)
     actions: []i32, // n*2, written by caller
     masks: []u8, // n*2*N_ACTIONS
@@ -174,6 +190,9 @@ pub const Env = struct {
             .seed = seed,
             .next_battle = 0,
             .states = try alloc.alloc(EnvState, n),
+            .log_buf = undefined,
+            .writer = undefined,
+            .opts = undefined,
             .actions = try alloc.alloc(i32, n * 2),
             .masks = try alloc.alloc(u8, n * 2 * N_ACTIONS),
             .needs = try alloc.alloc(u8, n * 2),
@@ -192,6 +211,13 @@ pub const Env = struct {
         @memset(env.dones, 0);
         @memset(env.ep_turns, 0);
         @memset(env.ep_idx, 0);
+        // log plumbing: env is heap-pinned, so interior pointers are stable
+        env.writer = .{ .buffer = &env.log_buf };
+        env.opts = pkmn.battle.options(
+            pkmn.protocol.FixedLog{ .writer = &env.writer },
+            pkmn.gen1.chance.NULL,
+            pkmn.gen1.calc.NULL,
+        );
         for (0..n) |i| {
             env.resetBattle(@intCast(i));
             env.advance(@intCast(i));
@@ -233,10 +259,11 @@ pub const Env = struct {
             .result = .{},
             .battle_idx = k,
             .revealed = @splat(@splat(false)),
-            .moves_used = @splat(@splat(@splat(false))),
+            .usage = @splat(@splat(@splat(0))),
+            .events = @splat(@splat(false)),
+            .last_move_side = 2,
         };
-        var opts = gen1.NULL;
-        s.result = s.battle.update(.{}, .{}, &opts) catch unreachable; // leads
+        s.result = env.update2(s, .{}, .{}); // leads
     }
 
     /// Ends the current battle with the given rewards and starts a new one.
@@ -289,9 +316,71 @@ pub const Env = struct {
                 continue;
             }
             if (n1 > 1 or n2 > 1) return; // real decision: expose to policy
-            var opts = gen1.NULL;
-            s.result = s.battle.update(buf1[0], buf2[0], &opts) catch unreachable;
+            s.result = env.update2(s, buf1[0], buf2[0]);
         }
+    }
+
+    /// update + parse the emitted binary protocol for event flags. Byte
+    /// lengths transcribed from the driver's decoders (src/pkg/protocol.ts);
+    /// unknown opcodes panic (fail loud beats silent corruption).
+    fn update2(env: *Env, s: *EnvState, c1: Choice, c2: Choice) Result {
+        env.writer.pos = 0;
+        const r = s.battle.update(c1, c2, &env.opts) catch unreachable;
+        const b = env.log_buf[0..env.writer.pos];
+        var i: usize = 0;
+        while (i < b.len) {
+            const op = b[i];
+            i += 1;
+            switch (op) {
+                0 => break, // None: end of update
+                1 => {}, // LastStill
+                2 => if (s.last_move_side < 2) { // LastMiss -> mover missed
+                    s.events[s.last_move_side][1] = true;
+                },
+                3 => { // Move [ident, move, target, reason(, from)]
+                    const side: u8 = if ((b[i] >> 3) == 0) 0 else 1;
+                    s.events[side][0] = true;
+                    s.last_move_side = side;
+                    i += if (b[i + 3] == 1) 5 else 4;
+                },
+                4 => i += 8, // Switch
+                5 => i += if (b[i + 1] == 5) 3 else 2, // Cant (+Disable move)
+                6 => i += 1, // Faint
+                7 => i += 2, // Turn
+                8 => i += 1, // Win
+                9 => {}, // Tie
+                10 => i += if (b[i + 6] == 5) 8 else 7, // Damage (+RecoilOf)
+                11 => i += if (b[i + 6] == 2) 8 else 7, // Heal (+Drain of)
+                12 => i += if (b[i + 2] == 2) 4 else 3, // Status (+From move)
+                13 => i += 3, // CureStatus
+                14 => i += 3, // Boost
+                15 => {}, // ClearAllBoost
+                16 => i += 2, // Fail
+                17 => { // Miss: ident = attacker
+                    s.events[if ((b[i] >> 3) == 0) 0 else 1][1] = true;
+                    i += 1;
+                },
+                18, 19 => i += 2, // HitCount, Prepare
+                20 => i += 1, // MustRecharge
+                21 => i += 2, // Activate
+                22 => {}, // FieldActivate
+                23 => { // Start (+TypeChange: types+of, +Disable/Mimic: move)
+                    const reason = b[i + 1];
+                    i += if (reason == 9) 4 else if (reason == 10 or reason == 11) 3 else 2;
+                },
+                24 => i += 2, // End
+                25 => {}, // OHKO
+                26 => { // Crit: ident = defender -> credit the attacker
+                    s.events[(if ((b[i] >> 3) == 0) @as(u8, 0) else 1) ^ 1][2] = true;
+                    i += 1;
+                },
+                27, 28 => i += 1, // SuperEffective, Resisted
+                29 => i += 2, // Immune (+reason)
+                30 => i += 2, // Transform
+                else => std.debug.panic("unknown protocol opcode {d}", .{op}),
+            }
+        }
+        return r;
     }
 
     fn actionToChoice(action: i32) Choice {
@@ -338,12 +427,11 @@ pub const Env = struct {
                     choice[p] = c;
                     if (c.type == .Move and c.data > 0) {
                         const id = s.battle.side(player).order[0];
-                        s.moves_used[p][id - 1][c.data - 1] = true;
+                        s.usage[p][id - 1][c.data - 1] +|= 1;
                     }
                 }
             }
-            var opts = gen1.NULL;
-            s.result = s.battle.update(choice[0], choice[1], &opts) catch unreachable;
+            s.result = env.update2(s, choice[0], choice[1]);
             env.advance(i);
             env.expose(i);
         }
@@ -369,15 +457,17 @@ pub const Env = struct {
             env.encode(i, player, p);
             env.maskObs(i, player, p);
         }
+        s.events = @splat(@splat(false)); // consumed by this expose
+        s.last_move_side = 2;
     }
 
     // Layout landmarks for maskObs (must match encode(); see header comment):
-    // opponent mon int blocks 36..72 (6 blocks x [species,status,m1..4]),
-    // opponent mon float blocks 48..96 (6 x [hp,level,active,revealed,pp1..4]),
-    // int 78 = opponent last_selected_move; floats 149..154 = opponent
-    // sleep-counter + modified stats.
+    // opponent mon int blocks 36..72; opponent mon float blocks 78..156
+    // (6 x MON_F); int 78 = opponent last_selected_move; floats 209..214 =
+    // opponent sleep-counter + modified stats. Event flags/usage counts are
+    // public. maxhp of revealed opponents is public-computable in randbats.
     const OPP_LSM_INT = 78;
-    const OPP_PRIVATE_F = [2]usize{ 149, 154 };
+    const OPP_PRIVATE_F = [2]usize{ 209, 214 };
 
     fn maskObs(env: *Env, i: u32, player: Player, p: usize) void {
         const base = (i * 2 + @as(u32, @intCast(p)));
@@ -393,16 +483,16 @@ pub const Env = struct {
         const side = s.battle.side(player.foe());
         for (0..6) |j| {
             const ii = 36 + j * 6;
-            const fi = 48 + j * 8;
+            const fi = 6 * MON_F + j * MON_F;
             const id = side.order[j];
             if (id == 0) continue;
             if (!s.revealed[opp][id - 1]) {
                 @memset(mi[ii .. ii + 6], 0);
-                @memset(mf[fi .. fi + 8], 0);
+                @memset(mf[fi .. fi + MON_F], 0);
                 mf[fi] = 1.0; // bench mons are undamaged in gen1
             } else {
                 for (0..4) |k| {
-                    if (!s.moves_used[opp][id - 1][k]) mi[ii + 2 + k] = 0;
+                    if (s.usage[opp][id - 1][k] == 0) mi[ii + 2 + k] = 0;
                 }
                 @memset(mf[fi + 4 .. fi + 8], 0); // exact pp hidden
             }
@@ -428,7 +518,7 @@ pub const Env = struct {
                 const id = side.order[slot - 1];
                 if (id == 0) { // absent (never in randbats; keep layout stable)
                     ii += 6;
-                    fi += 8;
+                    fi += MON_F;
                     continue;
                 }
                 const mon = &side.pokemon[id - 1];
@@ -444,10 +534,15 @@ pub const Env = struct {
                 floats[fi + 2] = @floatFromInt(@intFromBool(is_active));
                 floats[fi + 3] = @floatFromInt(@intFromBool(s.revealed[sp][id - 1]));
                 for (0..4) |k| floats[fi + 4 + k] = @as(f32, @floatFromInt(moves[k].pp)) / 63.0;
-                fi += 8;
+                floats[fi + 8] = max_hp / 1000.0;
+                for (0..4) |k| {
+                    floats[fi + 9 + k] =
+                        @min(1.0, @as(f32, @floatFromInt(s.usage[sp][id - 1][k])) / 16.0);
+                }
+                fi += MON_F;
             }
         }
-        std.debug.assert(ii == 72 and fi == 96);
+        std.debug.assert(ii == 72 and fi == 12 * MON_F);
 
         for (sides) |side| {
             const active = &side.active;
@@ -475,7 +570,14 @@ pub const Env = struct {
             }
         }
         floats[fi] = @as(f32, @floatFromInt(s.battle.turn)) / 500.0;
-        std.debug.assert(ii <= INTS_PER_PLAYER and fi < FLOATS_PER_PLAYER);
+        fi += 1;
+        for (pidx) |sp| { // event flags: [attempted, missed, crit] mine then theirs
+            for (0..3) |e| {
+                floats[fi] = @floatFromInt(@intFromBool(s.events[sp][e]));
+                fi += 1;
+            }
+        }
+        std.debug.assert(ii <= INTS_PER_PLAYER and fi <= FLOATS_PER_PLAYER);
     }
 };
 
@@ -588,6 +690,9 @@ test "env: fuzz random-legal actions" {
         .seed = 0x1234,
         .next_battle = 0,
         .states = try alloc.alloc(EnvState, 8),
+        .log_buf = undefined,
+        .writer = undefined,
+        .opts = undefined,
         .actions = try alloc.alloc(i32, 16),
         .masks = try alloc.alloc(u8, 16 * N_ACTIONS),
         .needs = try alloc.alloc(u8, 16),
@@ -602,6 +707,12 @@ test "env: fuzz random-legal actions" {
         .episodes = 0,
     };
     pool.owned = false; // env now owns the bytes via destroy()
+    env.writer = .{ .buffer = &env.log_buf };
+    env.opts = pkmn.battle.options(
+        pkmn.protocol.FixedLog{ .writer = &env.writer },
+        pkmn.gen1.chance.NULL,
+        pkmn.gen1.calc.NULL,
+    );
     @memset(env.actions, 0);
     @memset(env.rewards, 0);
     @memset(env.dones, 0);
@@ -648,11 +759,15 @@ test "env: fuzz random-legal actions" {
         try testing.expectEqualSlices(i32, ti[0..36], mi[0..36]); // own side intact
         try testing.expectEqual(@as(i32, 0), mi[Env.OPP_LSM_INT]);
         for (0..6) |j| {
-            const revealed = mfl[48 + j * 8 + 3];
+            const fi = 6 * MON_F + j * MON_F;
+            const revealed = mfl[fi + 3];
             if (revealed == 0 and ti[36 + j * 6] != 0) {
                 try testing.expectEqual(@as(i32, 0), mi[36 + j * 6]); // species hidden
-                try testing.expectEqual(@as(f32, 1.0), mfl[48 + j * 8]); // full hp known
+                try testing.expectEqual(@as(f32, 1.0), mfl[fi]); // full hp known
             }
+        }
+        for (215..221) |fx| { // event flags are binary
+            try testing.expect(mfl[fx] == 0.0 or mfl[fx] == 1.0);
         }
         try testing.expect(steps < 200_000);
     }

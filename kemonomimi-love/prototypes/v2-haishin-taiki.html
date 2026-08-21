@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V2 配信待機画面 — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Stream "starting soon" overlay genre study. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@700;900&display=swap");
+  :root {
+    --pink: #ff94b4; --pinkbg: #ffe3ec; --sky: #9edcf0; --skybg: #e2f6ff;
+    --hot: #ff5c8a; --sun: #ffd97a; --ink: #2a2a45; --white: #fffdfa;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); min-height: 100vh;
+    overflow: hidden; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--pinkbg), var(--white) 55%, var(--skybg)); }
+
+  /* ---------- hero underneath (base = final) ---------- */
+  .hero { text-align: center; padding: 24px; }
+  .hero .mae { font-family: "Mochiy Pop One", sans-serif; font-size: clamp(15px, 3vw, 22px); color: var(--hot); }
+  .hero h1 { font-size: clamp(38px, 8vw, 76px); font-weight: 900; margin-top: 10px; }
+  .hero h1 .dot { color: var(--hot); }
+  .play .hero .mae { animation: rise .5s var(--snap) 4.05s both; }
+  .play .hero h1   { animation: rise .5s var(--snap) 4.2s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- waiting screen (slides away at the end) ---------- */
+  .taiki { position: fixed; inset: 0; z-index: 20; transform: translateY(-105%);
+    background: linear-gradient(135deg, var(--pink), var(--sky));
+    display: grid; place-items: center; }
+  .play .taiki { animation: wait 4.3s var(--snap) both; }
+  @keyframes wait { 0% { transform: translateY(0); } 88% { transform: translateY(0); } 100% { transform: translateY(-105%); } }
+
+  .frame { position: absolute; inset: clamp(12px, 3vw, 26px); background: var(--white);
+    border: 4px solid var(--ink); border-radius: 26px; overflow: hidden; }
+  .checker { position: absolute; height: 34px; left: -8px; right: -8px;
+    background: repeating-conic-gradient(var(--ink) 0% 25%, transparent 0% 50%) 0 0 / 17px 17px; opacity: .9; }
+  .checker.t { top: 0; transform: rotate(-1.2deg); background-color: var(--sun); }
+  .checker.b { bottom: 0; transform: rotate(1.2deg); background-color: var(--pink); }
+  .dots { position: absolute; width: 220px; aspect-ratio: 1; border-radius: 50%; opacity: .5;
+    background: radial-gradient(circle, var(--sky) 0 3px, transparent 4px) 0 0 / 18px 18px; }
+  .dots.tl { top: -60px; left: -60px; } .dots.br { bottom: -60px; right: -60px; }
+
+  .naka { text-align: center; position: relative; padding: 24px; }
+  .live { display: inline-flex; align-items: center; gap: 8px; font-family: "Mochiy Pop One", sans-serif;
+    font-size: 12px; background: var(--white); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 7px 16px; box-shadow: 0 3px 0 var(--ink); }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: #f36060; }
+  .play .live i { animation: pika 1s steps(1) infinite; }
+  @keyframes pika { 50% { opacity: .15; } }
+
+  .taiki h2 { font-family: "Mochiy Pop One", sans-serif; font-size: clamp(30px, 6.4vw, 58px);
+    margin-top: 26px; color: var(--ink); }
+  .taiki h2 span { display: inline-block; }
+  .play .taiki h2 span { animation: pyon 1.6s ease-in-out infinite; animation-delay: calc(var(--i) * 0.09s); }
+  @keyframes pyon { 0%, 22%, 100% { transform: none; } 11% { transform: translateY(-.32em); } }
+
+  .junbi { margin-top: 14px; font-size: 15px; font-weight: 700; letter-spacing: .2em; }
+  .play .junbi::after { content: "・"; animation: tenten 1.5s steps(1) infinite; }
+  @keyframes tenten { 33% { content: "・・"; } 66% { content: "・・・"; } }
+
+  .meter { width: min(380px, 70vw); height: 20px; margin: 26px auto 0; border: 3px solid var(--ink);
+    border-radius: 999px; overflow: hidden; background: var(--white); }
+  .meter i { display: block; height: 100%; width: 30%; border-radius: 999px;
+    background: repeating-linear-gradient(-45deg, var(--hot) 0 12px, var(--pink) 12px 24px); }
+  .play .meter i { animation: fill 3.4s var(--snap) .3s both, candy .7s linear infinite; }
+  @keyframes fill { from { width: 4%; } to { width: 100%; } }
+  @keyframes candy { to { background-position: 24px 0; } }
+
+  .koneko { position: absolute; left: 8%; bottom: 10%; font-family: "Mochiy Pop One", sans-serif;
+    font-size: clamp(20px, 4vw, 30px); transform-origin: 70% 90%; }
+  .play .koneko { animation: furifuri 1.4s ease-in-out infinite; }
+  @keyframes furifuri { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+
+  .replay { position: fixed; right: 20px; bottom: 20px; z-index: 30;
+    font-family: "Mochiy Pop One", sans-serif; font-size: 13px; color: var(--ink);
+    background: var(--white); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 11px 20px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); }
+  .replay:hover { transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <main class="hero">
+    <p class="mae">はじまったよ！</p>
+    <h1>猫耳は、最強<span class="dot">。</span></h1>
+  </main>
+
+  <div class="taiki">
+    <div class="frame">
+      <span class="checker t"></span><span class="checker b"></span>
+      <span class="dots tl"></span><span class="dots br"></span>
+      <div class="naka">
+        <span class="live"><i></i>LIVE じゅんびちゅう</span>
+        <h2>
+          <span style="--i:0">ま</span><span style="--i:1">も</span><span style="--i:2">な</span><span
+          style="--i:3">く</span><span style="--i:4">　は</span><span style="--i:5">じ</span><span
+          style="--i:6">ま</span><span style="--i:7">る</span><span style="--i:8">よ</span><span style="--i:9">！</span>
+        </h2>
+        <p class="junbi">きょうの訓練メニューを じゅんびちゅう</p>
+        <div class="meter"><i></i></div>
+        <span class="koneko">ฅ^•ω•^ฅ</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="replay" onclick="replay()">もっかい！</button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

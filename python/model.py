@@ -21,7 +21,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 N_ACTIONS = 10
-N_MON, MON_INTS, MON_FLOATS = 12, 6, 8
+N_MON, MON_INTS, MON_FLOATS = 12, 6, 13  # obs v3
+OBS_INTS, OBS_FLOATS = 80, 224
 CTX = 128
 EMBED_CHUNK = 16384  # SDPA batch-dim limit + autograd peak-memory cap (math is chunk-invariant)
 
@@ -140,10 +141,10 @@ class Model(nn.Module):
             self.register_buffer("SP_MONO", mono)
             self.register_buffer("CHART", chart)
             mon_dim = (48 + sf.shape[1]) + (48 + mf.shape[1]) + 16 + MON_FLOATS
-            glob_dim = 160 - N_MON * MON_FLOATS + 4  # + my 4 moves' effectiveness
+            glob_dim = OBS_FLOATS - N_MON * MON_FLOATS + 4  # + my 4 moves' effectiveness
         else:
             mon_dim = 48 + 48 + 16 + MON_FLOATS
-            glob_dim = 160 - N_MON * MON_FLOATS
+            glob_dim = OBS_FLOATS - N_MON * MON_FLOATS
         self.mon_in = nn.Linear(mon_dim, d)
         self.global_in = nn.Linear(glob_dim, d)
         self.tok_pos = nn.Parameter(torch.randn(1, N_MON + 1, d) * 0.02)
@@ -174,7 +175,7 @@ class Model(nn.Module):
             return torch.cat([self.embed_step(ints[i:i + EMBED_CHUNK], floats[i:i + EMBED_CHUNK])
                               for i in range(0, B, EMBED_CHUNK)])
         mi = ints[:, :72].view(-1, N_MON, MON_INTS).long()
-        mf = floats[:, :96].view(-1, N_MON, MON_FLOATS)
+        mf = floats[:, :N_MON * MON_FLOATS].view(-1, N_MON, MON_FLOATS)
         sp = mi[..., 0].clamp(0, 151)
         mv = mi[..., 2:6].clamp(0, 165)
         sp_e = self.species(sp)
@@ -185,7 +186,7 @@ class Model(nn.Module):
         mon = self.mon_in(torch.cat([
             sp_e, mv_e.mean(dim=2), self.status(mi[..., 1].clamp(0, 255)), mf,
         ], dim=-1))
-        g = floats[:, 96:]
+        g = floats[:, N_MON * MON_FLOATS:]
         if self.dex_feats:
             # effectiveness of my active's 4 moves vs their active (the exact
             # quantity the max-damage baseline computes); dual types multiply
@@ -220,15 +221,49 @@ class Model(nn.Module):
         return self.ln_f(x)
 
 
+def load_expanded(model, old_sd):
+    """Load a v1-obs (160f, MON_FLOATS=8) checkpoint into a v3-obs (224f,
+    MON_FLOATS=13) model. New feature columns are zero-initialized, so the
+    expanded model is function-identical to the old one until training uses
+    the new inputs. Column maps follow the layout diffs:
+      mon floats: v1 [hp,lvl,act,rev,pp4] -> v3 same 8 + [maxhp, used4] new
+      globals:    v1 extras cols 0..58 identical (incl turn), 59.. was pad;
+                  v3 adds event flags at 59..65; eff features move 64:68->68:72
+    """
+    sd = model.state_dict()
+    loaded = set()
+    for k, v in old_sd.items():
+        if k == "mon_in.weight":
+            w = torch.zeros_like(sd[k])
+            pre = v.shape[1] - 8  # embeddings/dex-feat columns, unchanged
+            w[:, :pre] = v[:, :pre]
+            w[:, pre:pre + 8] = v[:, pre:]
+            sd[k] = w
+        elif k == "global_in.weight":
+            w = torch.zeros_like(sd[k])
+            w[:, :59] = v[:, :59]
+            w[:, 68:72] = v[:, 64:68]
+            sd[k] = w
+        elif k in sd and sd[k].shape == v.shape:
+            sd[k] = v
+        else:
+            raise ValueError(f"cannot map {k} {tuple(v.shape)} into expanded model")
+        loaded.add(k)
+    missing = set(sd) - loaded
+    assert not missing, f"old checkpoint lacks {missing}"
+    model.load_state_dict(sd)
+    return model
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     m = Model(d=96, e_layers=1, t_layers=3, heads=4).eval()
     B, T = 5, 17
-    ints = torch.randint(0, 100, (B, T, 80), dtype=torch.int32)
-    floats = torch.rand(B, T, 160)
+    ints = torch.randint(0, 100, (B, T, OBS_INTS), dtype=torch.int32)
+    floats = torch.rand(B, T, OBS_FLOATS)
     lens = torch.tensor([T, 11, 7, 17, 1])
     with torch.no_grad():
-        emb = m.embed_step(ints.view(-1, 80), floats.view(-1, 160)).view(B, T, -1)
+        emb = m.embed_step(ints.view(-1, OBS_INTS), floats.view(-1, OBS_FLOATS)).view(B, T, -1)
         h_seq = m.forward_seq(emb, lens)
         cache = m.new_cache(B, "cpu")
         errs = []

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>けもみみ研究所 — みるくティー篇（フルサイト試作）</title>
+<script>document.documentElement.classList.add("boot");</script>
+<!-- Full-site sample A: milk-tea x strawberry palette, Kiwi Maru. Original animations. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@300;400;500&display=swap");
+  :root {
+    --bg: #faf1e4; --bg2: #f3e5d0; --card: #fffdf8; --ink: #4a3345;
+    --straw: #e85d75; --strawbg: #f9dde2; --butter: #f2c94c; --matcha: #9ac48a;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --rush: cubic-bezier(0.7, 0.05, 0.95, 0.5);
+    --ears: polygon(0 7%, 13% 7%, 21% 0, 29% 7%, 71% 7%, 79% 0, 87% 7%, 100% 7%, 100% 100%, 0 100%);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: "Kiwi Maru", serif; }
+
+  /* ================= OPENING (three acts, compressed) ================= */
+  .cover { position: fixed; inset: 0; background: var(--ink); z-index: 95; opacity: 0; pointer-events: none; }
+  .play .cover { animation: hideStep .02s linear 2.2s both; }
+  @keyframes hideStep { from { opacity: 1; } to { opacity: 0; } }
+  .tcard { position: fixed; inset: 0; z-index: 96; display: grid; place-content: center;
+    text-align: center; opacity: 0; pointer-events: none; }
+  .play .tcard { animation: hideStep .02s linear 2.2s both; }
+  .tcard h2 { color: #fff7ef; font-weight: 500; font-size: clamp(28px, 6.4vw, 52px); letter-spacing: .1em; }
+  .tcard .ch { display: inline-block; }
+  .play .tcard .ch { animation: chIn .38s var(--snap) both, chOut .22s var(--snap) forwards; }
+  .play .tcard .ch:nth-child(1) { animation-delay: .12s, 1.62s; }
+  .play .tcard .ch:nth-child(2) { animation-delay: .20s, 1.65s; }
+  .play .tcard .ch:nth-child(3) { animation-delay: .28s, 1.68s; }
+  .play .tcard .ch:nth-child(4) { animation-delay: .36s, 1.71s; }
+  .play .tcard .ch:nth-child(5) { animation-delay: .44s, 1.74s; }
+  .play .tcard .ch:nth-child(6) { animation-delay: .52s, 1.77s; }
+  .play .tcard .ch:nth-child(7) { animation-delay: .60s, 1.80s; }
+  @keyframes chIn  { from { opacity: 0; clip-path: inset(100% 0 0 0); transform: translateY(.22em); }
+                     to { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } }
+  @keyframes chOut { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 100% 0); transform: translateY(-.16em); } }
+  .tcard .dot { display: inline-block; width: .3em; aspect-ratio: 1; border-radius: 50%;
+    background: var(--straw); margin-left: .12em; will-change: transform; }
+  .play .tcard .dot { animation: dotIn .3s var(--pop) 1.0s both, dotGrow .55s var(--rush) 1.68s both; }
+  @keyframes dotIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  @keyframes dotGrow { from { transform: scale(1); } 18% { transform: scale(.72); } to { transform: scale(320); } }
+  .veil { position: fixed; left: 0; top: -7.5vh; width: 100vw; height: 115vh; z-index: 94;
+    clip-path: var(--ears); transform: translateY(103%); pointer-events: none; }
+  .veil.a { background: var(--straw); }
+  .veil.b { background: var(--ink); z-index: 93; }
+  .play .veil.a { animation: earUp .95s var(--snap) 2.24s both; }
+  .play .veil.b { animation: earUp .95s var(--snap) 2.38s both; }
+  @keyframes earUp { 0% { transform: translateY(0); } 12% { transform: translateY(-1.4%); } 100% { transform: translateY(103%); } }
+  .skip { position: fixed; right: 18px; top: 18px; z-index: 97; background: none; border: none;
+    color: #fff7ef; font-family: "Kiwi Maru", serif; font-size: 11px; letter-spacing: .3em;
+    cursor: pointer; opacity: 0; pointer-events: none; }
+  .play .skip { opacity: .7; pointer-events: auto; animation: hideStep .02s linear 2.2s both; }
+  body.skipped .cover, body.skipped .tcard, body.skipped .veil, body.skipped .skip { display: none; }
+  body.skipped * { animation-delay: 0s !important; }
+  html.boot .cover { opacity: 1; }   /* cover from first paint — no flash */
+  html.boot body { overflow: hidden; } /* no scrolling under the intro */
+
+  /* ================= NAV ================= */
+  nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 22px;
+    padding: 14px clamp(16px, 4vw, 40px); background: rgba(250,241,228,.88);
+    backdrop-filter: blur(8px); border-bottom: 1px solid rgba(74,51,69,.18); }
+  .play nav { animation: navIn .6s var(--snap) 2.75s both; }
+  @keyframes navIn { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+  .mark { position: relative; width: 26px; aspect-ratio: 1; border-radius: 50%; background: var(--straw); }
+  .mark::before, .mark::after { content: ""; position: absolute; top: -7px; width: 12px; height: 11px;
+    background: var(--straw); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .mark::before { left: 0; transform: rotate(-14deg); }
+  .mark::after { right: 0; transform: rotate(14deg); }
+  nav b { font-weight: 500; font-size: 15px; letter-spacing: .14em; }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 12.5px; letter-spacing: .1em; }
+  nav .links a { color: var(--ink); text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; }
+  nav .links a:hover { border-color: var(--straw); }
+  @media (max-width: 680px) { nav .links { display: none; } }
+
+  /* ================= HERO ================= */
+  .hero { min-height: 78vh; display: grid; place-content: center; text-align: center; padding: 40px 20px 30px; }
+  .kicker { font-size: 11px; letter-spacing: .44em; text-indent: .44em; color: var(--straw); margin-bottom: 18px; }
+  .hero h1 { font-weight: 500; font-size: clamp(38px, 8.4vw, 84px); letter-spacing: .04em; }
+  .hero h1 .d { color: var(--straw); display: inline-block; }
+  .lead { font-size: clamp(13px, 2.2vw, 16px); letter-spacing: .2em; margin-top: 20px; }
+  .stats-line { display: inline-block; margin: 30px auto 0; padding: 12px 10px;
+    border-top: 1px dashed var(--straw); border-bottom: 1px dashed var(--straw);
+    font-size: 11.5px; letter-spacing: .14em; }
+  .play .kicker { animation: rise .6s var(--snap) 2.8s both; }
+  .play .hero h1 { animation: riseSettle .7s var(--snap) 2.9s both; }
+  .play .lead { animation: rise .6s var(--snap) 3.05s both; }
+  .play .stats-line { animation: rise .6s var(--snap) 3.2s both; }
+  .play .hero .d { animation: nod .5s var(--pop) 4.1s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+  @keyframes riseSettle { from { opacity: 0; transform: translateY(30px) scale(1.05); } to { opacity: 1; transform: none; } }
+  @keyframes nod { 0%,100% { transform: none; } 40% { transform: translateY(-.14em); } 70% { transform: translateY(.04em); } }
+
+  /* ================= MARQUEE ================= */
+  .ticker { overflow: hidden; white-space: nowrap; background: var(--ink); color: var(--bg);
+    padding: 10px 0; font-size: 12.5px; letter-spacing: .18em; }
+  .ticker span { display: inline-block; animation: scroll 26s linear infinite; }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+  .ticker i { font-style: normal; color: var(--butter); margin: 0 14px; }
+
+  /* ================= SECTIONS ================= */
+  section { max-width: 880px; margin: 0 auto; padding: 72px clamp(16px, 4vw, 32px) 20px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 26px; }
+  .sec-head h2 { font-weight: 500; font-size: clamp(22px, 4vw, 30px); letter-spacing: .18em; }
+  .sec-head small { font-size: 10px; letter-spacing: .4em; color: var(--straw); }
+  .sec-head::after { content: ""; flex: 1; border-bottom: 1px dashed rgba(74,51,69,.3); }
+
+  [data-rv] { transition: opacity .7s var(--snap), transform .7s var(--snap); }
+  .pre { opacity: 0; transform: translateY(30px); }
+
+  /* news */
+  .news { display: grid; border-top: 1px solid rgba(74,51,69,.25); }
+  .news a { display: flex; gap: 18px; align-items: baseline; padding: 16px 6px; color: var(--ink);
+    text-decoration: none; border-bottom: 1px solid rgba(74,51,69,.25); position: relative; overflow: hidden; }
+  .news a::before { content: ""; position: absolute; inset: 0; background: var(--strawbg);
+    transform: translateX(-101%); transition: transform .3s var(--snap); z-index: -1; }
+  .news a:hover::before { transform: none; }
+  .news time { font-size: 11.5px; letter-spacing: .1em; color: var(--straw); white-space: nowrap; }
+  .news .chip { font-size: 10px; border: 1px solid var(--ink); border-radius: 2px; padding: 2px 8px; white-space: nowrap; }
+  .news p { font-size: 14px; letter-spacing: .08em; }
+
+  /* research cards */
+  .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .cards3 { grid-template-columns: 1fr; } }
+  .rcard { background: var(--card); border: 1px solid rgba(74,51,69,.28); border-radius: 4px;
+    padding: 24px 20px; position: relative; }
+  .rcard:hover { border-color: var(--straw); }
+  .rcard .no { font-size: 11px; color: var(--straw); letter-spacing: .3em; }
+  .rcard h3 { font-weight: 500; font-size: 17px; letter-spacing: .12em; margin: 10px 0 12px; }
+  .rcard p { font-size: 12.5px; line-height: 2.1; letter-spacing: .06em; }
+  .rcard .badge { position: absolute; top: -10px; right: 14px; background: var(--butter);
+    font-size: 10px; padding: 4px 10px; border-radius: 999px; letter-spacing: .12em; }
+
+  /* numbers */
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; text-align: center; }
+  @media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } }
+  .num { background: var(--bg2); border-radius: 4px; padding: 26px 10px 20px; }
+  .num b { display: block; font-size: clamp(26px, 4.6vw, 40px); font-weight: 500; color: var(--straw); }
+  .num span { display: block; font-size: 11px; letter-spacing: .2em; margin-top: 10px; }
+
+  /* chart */
+  .chartbox { background: var(--card); border: 1px solid rgba(74,51,69,.28); border-radius: 4px; padding: 26px 22px 14px; }
+  .chartbox .cap { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .16em; margin-bottom: 12px; }
+  .chartbox .cap i { font-style: normal; color: var(--straw); }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .gridline { stroke: rgba(74,51,69,.14); stroke-width: 1; }
+  .axis-t { font-size: 11px; fill: var(--ink); opacity: .65; letter-spacing: .1em; }
+  .tline { fill: none; stroke: var(--straw); stroke-width: 3; stroke-linecap: round;
+    stroke-dasharray: 100; stroke-dashoffset: 100; }
+  .in .tline { transition: stroke-dashoffset 1.4s var(--snap) .2s; stroke-dashoffset: 0; }
+  .mkr { opacity: 0; transition: opacity .4s ease 1.2s; fill: var(--straw); }
+  .in .mkr { opacity: 1; }
+
+  footer { margin-top: 80px; padding: 30px 20px 90px; text-align: center; background: var(--bg2); }
+  footer .mark { margin: 0 auto 14px; }
+  footer p { font-size: 11px; letter-spacing: .18em; line-height: 2.2; opacity: .75; }
+
+  .replay { position: fixed; right: 18px; bottom: 18px; z-index: 60; overflow: hidden;
+    display: grid; gap: 2px; justify-items: center; background: var(--card);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 10px 18px 8px; cursor: pointer;
+    font-family: "Kiwi Maru", serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 11.5px; letter-spacing: .2em; }
+  .replay .en { position: relative; font-size: 7.5px; letter-spacing: .38em; color: var(--straw); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--strawbg);
+    transform: translateX(-101%); transition: transform .3s var(--snap); }
+  .replay:hover::before { transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    .pre { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="veil b"></div>
+  <div class="veil a"></div>
+  <div class="cover"></div>
+  <div class="tcard">
+    <h2><span class="ch">け</span><span class="ch">も</span><span class="ch">み</span><span
+      class="ch">み</span><span class="ch">研</span><span class="ch">究</span><span class="ch">所</span><span class="dot"></span></h2>
+  </div>
+  <button class="skip" onclick="skipIntro()">とばす →</button>
+
+  <nav>
+    <span class="mark"></span><b>けもみみ研究所</b>
+    <span class="links">
+      <a href="#news">おしらせ</a><a href="#research">けんきゅう</a><a href="#nums">すうじ</a><a href="#chart">きろく</a>
+    </span>
+  </nav>
+
+  <header class="hero">
+    <p class="kicker">かわいくて、つよい。</p>
+    <h1>猫耳は、最強<span class="d">。</span></h1>
+    <p class="lead">ゲームがつよい猫耳を、まじめに研究しています。</p>
+    <p class="stats-line">毎秒 93万バトル ・ 忠実度 1000／1000 ・ ごほうびは ±1 のみ</p>
+  </header>
+
+  <div class="ticker"><span>
+    けもみみ研究所 <i>♥</i> フェーズ0 完了 <i>♥</i> 毎秒93万バトル <i>♥</i> つぎは Metamon <i>♥</i> にゃー！ <i>♥</i>
+    けもみみ研究所 <i>♥</i> フェーズ0 完了 <i>♥</i> 毎秒93万バトル <i>♥</i> つぎは Metamon <i>♥</i> にゃー！ <i>♥</i>
+  </span></div>
+
+  <section id="news">
+    <div class="sec-head"><h2>おしらせ</h2><small>NEWS</small></div>
+    <div class="news" data-rv>
+      <a href="#"><time>2025.08.20</time><span class="chip">達成</span><p>フェーズ0、すべての関門をクリアしました（M0）</p></a>
+      <a href="#"><time>2025.08.20</time><span class="chip">計測</span><p>差分テスト：本家Showdownと 1000戦中1000戦 完全一致</p></a>
+      <a href="#"><time>2025.08.19</time><span class="chip">開発</span><p>ベクトル化環境 v1 公開へ — 1コアで毎秒3万バトル</p></a>
+    </div>
+  </section>
+
+  <section id="research">
+    <div class="sec-head"><h2>けんきゅう</h2><small>RESEARCH</small></div>
+    <div class="cards3">
+      <div class="rcard" data-rv><span class="badge">はやい</span><span class="no">０１</span>
+        <h3>高速シミュレータ</h3><p>libpkmn を心臓に、毎秒93万バトル。シミュレーションは「ただ」。ボトルネックは推論だけ。</p></div>
+      <div class="rcard" data-rv><span class="badge">かんぺき</span><span class="no">０２</span>
+        <h3>真実のテスト</h3><p>本家Showdownとロックステップで千戦照合。乱数の一歩まで一致してはじめて「正しい」。</p></div>
+      <div class="rcard" data-rv><span class="badge">かしこい</span><span class="no">０３</span>
+        <h3>信念ヘッド</h3><p>見えない相手の手札を推理する頭。部分観測のゲームは、信じる力がつよさになる。</p></div>
+    </div>
+  </section>
+
+  <section id="nums">
+    <div class="sec-head"><h2>すうじで見る</h2><small>BY THE NUMBERS</small></div>
+    <div class="nums">
+      <div class="num" data-rv><b>93万</b><span>バトル／秒</span></div>
+      <div class="num" data-rv><b>1000<small>／1000</small></b><span>忠実度テスト</span></div>
+      <div class="num" data-rv><b>384<small>／384</small></b><span>ステータス一致</span></div>
+      <div class="num" data-rv><b>±1</b><span>ごほうび（それだけ）</span></div>
+    </div>
+  </section>
+
+  <section id="chart">
+    <div class="sec-head"><h2>きろく</h2><small>TRAINING</small></div>
+    <div class="chartbox" data-rv>
+      <p class="cap"><span>たいランダム勝率（評価ハーネス実測＋計画）</span><i>◆ いま 0.987</i></p>
+      <svg class="chart" viewBox="0 0 640 240">
+        <line class="gridline" x1="0" y1="30"  x2="640" y2="30"/>
+        <line class="gridline" x1="0" y1="90"  x2="640" y2="90"/>
+        <line class="gridline" x1="0" y1="150" x2="640" y2="150"/>
+        <line class="gridline" x1="0" y1="210" x2="640" y2="210"/>
+        <text class="axis-t" x="6" y="24">1.00</text>
+        <text class="axis-t" x="6" y="146">0.75</text>
+        <text class="axis-t" x="6" y="226">0.50</text>
+        <polyline class="tline" pathLength="100"
+          points="40,210 130,196 220,150 310,96 400,58 490,40 580,34"/>
+        <g class="mkr"><circle cx="220" cy="150" r="5"/><polygon points="214,146 217,138 221,145"/><polygon points="226,145 223,138 219,146"/></g>
+        <g class="mkr"><circle cx="400" cy="58" r="5"/><polygon points="394,54 397,46 401,53"/><polygon points="406,53 403,46 399,54"/></g>
+        <g class="mkr"><circle cx="580" cy="34" r="5"/><polygon points="574,30 577,22 581,29"/><polygon points="586,29 583,22 579,30"/></g>
+        <text class="axis-t" x="500" y="234">→ ばとる数</text>
+      </svg>
+    </div>
+  </section>
+
+  <footer>
+    <span class="mark"></span>
+    <p>© 2025 けもみみ研究所 ─ kemonomimi.love<br>
+    animation patterns inspired by yui540（コード未コピー・敬意のみ）</p>
+  </footer>
+
+  <button class="replay" onclick="replayIntro()"><span class="jp">もういちど</span><span class="en">OPENING</span></button>
+
+  <script>
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function skipIntro(){ document.documentElement.classList.remove("boot");
+      document.body.classList.remove("play"); document.body.classList.add("skipped"); }
+    function replayIntro(){ document.body.classList.remove("skipped");
+      scrollTo({top:0, behavior:"instant"});
+      document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("DOMContentLoaded", () => {
+      if (reduced) { document.documentElement.classList.remove("boot"); document.body.classList.add("skipped"); return; }
+      document.body.classList.add("play");
+      setTimeout(() => document.documentElement.classList.remove("boot"), 3400);
+    });
+
+    /* scroll reveals */
+    const els = document.querySelectorAll("[data-rv]");
+    if (!reduced) {
+      els.forEach(e => e.classList.add("pre"));
+      const io = new IntersectionObserver(es => es.forEach(x => {
+        if (x.isIntersecting) { x.target.classList.remove("pre"); x.target.classList.add("in"); io.unobserve(x.target); }
+      }), { threshold: .25 });
+      els.forEach(e => io.observe(e));
+    } else { els.forEach(e => e.classList.add("in")); }
+  </script>
+</body>
+</html>

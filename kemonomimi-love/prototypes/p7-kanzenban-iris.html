@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>07 完全版・肉球アイリス — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Three-act opening: title card -> iris collapse -> the dot grows ears. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap");
+  :root {
+    --cream: #fff9f0; --sakura: #ffb7c5; --hot: #ff5c8a; --mint: #b8e8d8; --ink: #2a2a45;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --c: 50% 44%;   /* iris target = where the logo mark lands */
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { background: var(--cream); color: var(--ink); font-family: "Zen Maru Gothic", sans-serif;
+    min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+
+  /* ============ ACT 1: dark stage, paw pulse, brand stamps in ============ */
+  .cover { position: fixed; inset: 0; background: var(--ink); z-index: 35; pointer-events: none;
+    clip-path: circle(0% at var(--c)); }
+  .rim { position: fixed; inset: 0; background: var(--sakura); z-index: 34; pointer-events: none;
+    clip-path: circle(0% at var(--c)); }
+  .play .cover { animation: iris .8s var(--snap) 2.62s both; }
+  .play .rim   { animation: iris .8s var(--snap) 2.76s both; }
+  @keyframes iris { from { clip-path: circle(152% at var(--c)); } to { clip-path: circle(0% at var(--c)); } }
+
+  .paw { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 36;
+    width: 96px; height: 88px; opacity: 0; pointer-events: none; }
+  .play .paw { animation: pawLife 1.05s ease-in-out .12s both; }
+  @keyframes pawLife {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(.8); }
+    18%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    45%  { transform: translate(-50%, -50%) scale(.94); }
+    70%  { transform: translate(-50%, -50%) scale(1.05); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(.86); }
+  }
+  .paw i { position: absolute; background: var(--sakura); border-radius: 50%; }
+  .paw .pad { width: 50px; height: 40px; left: 23px; top: 42px; border-radius: 48% 48% 50% 50% / 60% 60% 42% 42%; }
+  .paw .t1 { width: 19px; height: 23px; left: 2px;  top: 19px; }
+  .paw .t2 { width: 19px; height: 24px; left: 24px; top: 3px; }
+  .paw .t3 { width: 19px; height: 24px; left: 51px; top: 3px; }
+  .paw .t4 { width: 19px; height: 23px; left: 74px; top: 19px; }
+
+  .tcard { position: fixed; inset: 0; z-index: 36; display: grid; place-content: center;
+    text-align: center; opacity: 0; pointer-events: none; }
+  .play .tcard { animation: hideStep .02s linear 3.0s both; }
+  @keyframes hideStep { from { opacity: 1; } to { opacity: 0; } }
+  .tcard h2 { color: #fff; font-weight: 900; font-size: clamp(30px, 7vw, 58px); letter-spacing: .08em; }
+  .tcard .ch { display: inline-block; }
+  .play .tcard .ch { animation: chIn .4s var(--snap) both, chOut .24s var(--snap) forwards; }
+  .play .tcard .ch:nth-child(1) { animation-delay: 1.00s, 2.28s; }
+  .play .tcard .ch:nth-child(2) { animation-delay: 1.08s, 2.31s; }
+  .play .tcard .ch:nth-child(3) { animation-delay: 1.16s, 2.34s; }
+  .play .tcard .ch:nth-child(4) { animation-delay: 1.24s, 2.37s; }
+  .play .tcard .ch:nth-child(5) { animation-delay: 1.32s, 2.40s; }
+  .play .tcard .ch:nth-child(6) { animation-delay: 1.40s, 2.43s; }
+  .play .tcard .ch:nth-child(7) { animation-delay: 1.48s, 2.46s; }
+  @keyframes chIn  { from { opacity: 0; clip-path: inset(100% 0 0 0); transform: translateY(.22em); }
+                     to   { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } }
+  @keyframes chOut { from { clip-path: inset(0 0 0 0); transform: none; }
+                     to   { clip-path: inset(0 0 100% 0); transform: translateY(-.18em); } }
+  .tcard .cap { color: var(--sakura); font-size: 10px; font-weight: 700; letter-spacing: .5em;
+    text-indent: .5em; margin-top: 20px; }
+  .play .tcard .cap { animation: fadeIn .5s var(--snap) 1.75s both, chOut .2s var(--snap) 2.3s forwards; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ============ ACT 3: the iris leaves behind a dot... and the dot grows ears ============ */
+  .hero { text-align: center; padding: 24px; position: relative; z-index: 2;
+    display: grid; justify-items: center; }
+  .mark { position: relative; width: 58px; aspect-ratio: 1; border-radius: 50%; background: var(--hot);
+    margin-bottom: 30px; }
+  .mark::before, .mark::after { content: ""; position: absolute; top: -15px; width: 26px; height: 24px;
+    background: var(--hot); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .mark::before { left: 1px;  transform: rotate(-14deg); }
+  .mark::after  { right: 1px; transform: rotate(14deg); }
+  .play .mark { animation: markPop .5s var(--pop) 3.38s both, nod .55s var(--pop) 4.85s; }
+  @keyframes markPop { from { opacity: 0; transform: scale(.2) translateY(6px); }
+                       60% { transform: scale(1.12) translateY(-2px); } to { opacity: 1; transform: none; } }
+  @keyframes nod { 0%, 100% { transform: none; } 40% { transform: rotate(-7deg); } 72% { transform: rotate(4deg); } }
+  .play .mark::before { animation: earPopL .34s var(--pop) 3.92s both; }
+  .play .mark::after  { animation: earPopR .34s var(--pop) 4.02s both; }
+  @keyframes earPopL { from { transform: rotate(-14deg) scale(0); } to { transform: rotate(-14deg) scale(1); } }
+  @keyframes earPopR { from { transform: rotate(14deg) scale(0); }  to { transform: rotate(14deg) scale(1); } }
+
+  .hero h1 { font-size: clamp(38px, 8.4vw, 80px); font-weight: 900; letter-spacing: .02em; }
+  .hero h1 .dot2 { color: var(--hot); }
+  .lead { font-size: clamp(13px, 2.2vw, 16px); letter-spacing: .18em; margin-top: 18px; }
+  .play .hero h1 { animation: riseSettle .7s var(--snap) 4.15s both; }
+  .play .lead    { animation: rise .6s var(--snap) 4.32s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  @keyframes riseSettle { from { opacity: 0; transform: translateY(28px) scale(1.05); } to { opacity: 1; transform: none; } }
+
+  /* ============ JP furniture ============ */
+  .deco-v { position: fixed; top: 30px; right: 28px; writing-mode: vertical-rl; font-size: 10px;
+    font-weight: 700; letter-spacing: .34em; opacity: .5; z-index: 5; }
+  .deco-url { position: fixed; left: 26px; bottom: 24px; font-size: 9.5px; font-weight: 700;
+    letter-spacing: .3em; opacity: .45; z-index: 5; }
+  .replay { position: fixed; right: 22px; bottom: 22px; z-index: 50; overflow: hidden;
+    display: grid; gap: 3px; justify-items: center; background: var(--cream);
+    border: 1px solid var(--ink); border-radius: 2px; padding: 11px 20px 9px; cursor: pointer;
+    font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); }
+  .replay .jp { position: relative; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-indent: .22em; }
+  .replay .en { position: relative; font-size: 8px; font-weight: 700; letter-spacing: .4em;
+    text-indent: .4em; color: var(--hot); }
+  .replay::before { content: ""; position: absolute; inset: 0; background: var(--sakura);
+    transform: translateX(-101%); transition: transform .35s var(--snap); }
+  .replay:hover::before { transform: translateX(0); }
+  @media (max-width: 720px) { .deco-v, .deco-url { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="rim"></div>
+  <div class="cover"></div>
+  <div class="paw"><i class="t1"></i><i class="t2"></i><i class="t3"></i><i class="t4"></i><i class="pad"></i></div>
+
+  <div class="tcard">
+    <h2><span class="ch">け</span><span class="ch">も</span><span class="ch">み</span><span
+      class="ch">み</span><span class="ch">研</span><span class="ch">究</span><span class="ch">所</span></h2>
+    <p class="cap">KEMONOMIMI RESEARCH DIVISION</p>
+  </div>
+
+  <p class="deco-v">けもみみ研究所・二〇二五</p>
+  <p class="deco-url">kemonomimi.love</p>
+
+  <main class="hero">
+    <span class="mark"></span>
+    <h1>猫耳は、最強<span class="dot2">。</span></h1>
+    <p class="lead">勝つために生まれた、猫耳たち。</p>
+  </main>
+
+  <button class="replay" onclick="replay()"><span class="jp">もういちど</span><span class="en">REPLAY</span></button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V1 推し色スプラッシュ — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. VTuber talent-site hero genre study. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@700;900&display=swap");
+  :root {
+    --pink: #ff94b4; --pinkbg: #ffe3ec; --sky: #9edcf0; --skybg: #e2f6ff;
+    --hot: #ff5c8a; --sun: #ffd97a; --ink: #2a2a45; --white: #fffdfa;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: "Zen Maru Gothic", sans-serif; color: var(--ink); min-height: 100vh;
+    overflow: hidden; display: grid; place-items: center;
+    background:
+      radial-gradient(circle at 12% 20%, rgba(255,255,255,.65) 0 9px, transparent 10px),
+      radial-gradient(circle at 88% 30%, rgba(255,255,255,.6) 0 7px, transparent 8px),
+      radial-gradient(circle at 22% 82%, rgba(255,255,255,.5) 0 8px, transparent 9px),
+      radial-gradient(circle at 72% 88%, rgba(255,255,255,.55) 0 6px, transparent 7px),
+      linear-gradient(115deg, var(--pinkbg) 0 54%, var(--skybg) 54%);
+    background-size: 340px 340px, 300px 300px, 320px 320px, 280px 280px, 100% 100%; }
+
+  /* ---------- diagonal opening veils ---------- */
+  .veil { position: fixed; inset: -22%; transform: translateX(-135%) skewX(-12deg); pointer-events: none; }
+  .veil.p { background: var(--pink); z-index: 21; }
+  .veil.s { background: var(--sky);  z-index: 20; }
+  .play .veil.p { animation: diag 1.7s var(--snap) both; }
+  .play .veil.s { animation: diag 1.7s var(--snap) .13s both; }
+  @keyframes diag {
+    0%   { transform: translateX(-135%) skewX(-12deg); }
+    42%  { transform: translateX(0) skewX(-12deg); }
+    56%  { transform: translateX(0) skewX(-12deg); }
+    100% { transform: translateX(135%) skewX(-12deg); }
+  }
+
+  /* ---------- marquee bars (the talent-site signature) ---------- */
+  .bar { position: fixed; left: -4vw; right: -4vw; padding: 9px 0; background: var(--ink);
+    color: var(--white); font-family: "Mochiy Pop One", sans-serif; font-size: 13px;
+    letter-spacing: .12em; overflow: hidden; white-space: nowrap; z-index: 5; }
+  .bar.top { top: 0;    transform: rotate(-2deg); }
+  .bar.btm { bottom: 0; transform: rotate(2deg); background: var(--hot); }
+  .track { display: inline-block; padding-left: 0; animation: scroll 18s linear infinite; }
+  .bar.btm .track { animation-duration: 22s; animation-direction: reverse; }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+
+  /* ---------- logo lockup ---------- */
+  .hero { text-align: center; position: relative; z-index: 2; padding: 24px; }
+  .logo { font-family: "Dela Gothic One", sans-serif; font-size: clamp(46px, 10vw, 104px);
+    line-height: 1.16; color: var(--hot); transform: rotate(-2deg);
+    text-shadow: 0.045em 0.045em 0 var(--white), 0.1em 0.1em 0 var(--sky); }
+  .play .logo { animation: don .55s var(--pop) 1.15s both; }
+  @keyframes don {
+    from { opacity: 0; transform: scale(1.7) rotate(6deg); text-shadow: 0 0 0 var(--white), 0 0 0 var(--sky); }
+    to   { opacity: 1; transform: rotate(-2deg); text-shadow: 0.045em 0.045em 0 var(--white), 0.1em 0.1em 0 var(--sky); }
+  }
+  .yomi { font-family: "Mochiy Pop One", sans-serif; font-size: clamp(12px, 2.2vw, 16px);
+    letter-spacing: .5em; text-indent: .5em; margin-top: 16px; color: var(--ink); }
+  .play .yomi { animation: rise .5s var(--snap) 1.75s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+  /* profile chips */
+  .prof { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+  .prof span { background: var(--white); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 8px 16px; font-size: 12.5px; font-weight: 700; box-shadow: 0 3px 0 rgba(42,42,69,.2); }
+  .prof b { color: var(--hot); }
+  .play .prof span { animation: boing .45s var(--pop) both; }
+  .play .prof span:nth-child(1) { animation-delay: 1.95s; }
+  .play .prof span:nth-child(2) { animation-delay: 2.07s; }
+  .play .prof span:nth-child(3) { animation-delay: 2.19s; }
+  @keyframes boing { from { opacity: 0; transform: scale(.5) translateY(14px); } }
+
+  .cta { display: flex; gap: 12px; justify-content: center; margin-top: 24px; }
+  .cta a { font-family: "Mochiy Pop One", sans-serif; font-size: 14px; text-decoration: none;
+    color: var(--white); background: var(--hot); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 12px 24px; box-shadow: 0 4px 0 var(--ink); transition: transform .15s var(--pop), box-shadow .15s; }
+  .cta a.alt { background: var(--sky); color: var(--ink); }
+  .cta a:hover { transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
+  .play .cta { animation: rise .5s var(--snap) 2.35s both; }
+
+  /* ---------- starburst sticker ---------- */
+  .burst { position: absolute; top: -52px; right: clamp(-30px, 1vw, 40px); width: 148px; aspect-ratio: 1;
+    background: var(--sun); display: grid; place-items: center; text-align: center;
+    font-family: "Mochiy Pop One", sans-serif; font-size: 14px; line-height: 1.5; color: var(--ink);
+    transform: rotate(10deg); z-index: 3;
+    clip-path: polygon(100% 50%, 84.8% 59.3%, 93.3% 75%, 75.5% 75.5%, 75% 93.3%, 59.3% 84.8%,
+      50% 100%, 40.7% 84.8%, 25% 93.3%, 24.5% 75.5%, 6.7% 75%, 15.2% 59.3%, 0% 50%, 15.2% 40.7%,
+      6.7% 25%, 24.5% 24.5%, 25% 6.7%, 40.7% 15.2%, 50% 0%, 59.3% 15.2%, 75% 6.7%, 75.5% 24.5%,
+      93.3% 25%, 84.8% 40.7%); }
+  .play .burst { animation: slam .4s var(--pop) 1.6s both, wiggle 2.6s ease-in-out 2s infinite; }
+  @keyframes slam { from { opacity: 0; transform: scale(2.1) rotate(30deg); } to { opacity: 1; transform: rotate(10deg); } }
+  @keyframes wiggle { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(4deg); } }
+
+  /* sparkles */
+  .spark { position: fixed; width: 26px; aspect-ratio: 1; background: var(--white); z-index: 4;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+  .spark.s1 { top: 18%; left: 14%; } .spark.s2 { top: 64%; right: 12%; width: 18px; }
+  .spark.s3 { bottom: 20%; left: 24%; width: 16px; } .spark.s4 { top: 26%; right: 26%; width: 20px; }
+  .play .spark { animation: twinkle 1.8s ease-in-out infinite; }
+  .play .s2 { animation-delay: .5s; } .play .s3 { animation-delay: .9s; } .play .s4 { animation-delay: 1.3s; }
+  @keyframes twinkle { 0%, 100% { opacity: .25; transform: scale(.7) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(18deg); } }
+
+  .replay { position: fixed; right: 20px; bottom: 58px; z-index: 30;
+    font-family: "Mochiy Pop One", sans-serif; font-size: 13px; color: var(--ink);
+    background: var(--white); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 11px 20px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); }
+  .replay:hover { transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
+  @media (max-width: 720px) { .burst { width: 108px; font-size: 11px; top: -70px; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="veil p"></div>
+  <div class="veil s"></div>
+
+  <div class="bar top"><span class="track">けもみみ研究所 ★ NYAA!! ★ 毎秒93まんバトル ★ 猫耳は最強 ★ けもみみ研究所 ★ NYAA!! ★ 毎秒93まんバトル ★ 猫耳は最強 ★ </span></div>
+  <div class="bar btm"><span class="track">きょうも訓練中 ♡ Elo 2143↑ ♡ 忠実度1000／1000 ♡ ごほうびは±1だけ ♡ きょうも訓練中 ♡ Elo 2143↑ ♡ 忠実度1000／1000 ♡ ごほうびは±1だけ ♡ </span></div>
+
+  <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span><span class="spark s4"></span>
+
+  <main class="hero">
+    <span class="burst">毎秒<br>93まん<br>バトル!!</span>
+    <h1 class="logo">けもみみ<br>研究所</h1>
+    <p class="yomi">ケモノミミ・ラボラトリー</p>
+    <div class="prof">
+      <span>すきなもの：<b>かち</b></span>
+      <span>とくいわざ：<b>じこたいせん</b></span>
+      <span>ゆめ：<b>Metamonごえ</b></span>
+    </div>
+    <div class="cta"><a href="#">研究をみる ▶</a><a href="#" class="alt">ノートをよむ ✎</a></div>
+  </main>
+
+  <button class="replay" onclick="replay()">もっかい！</button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

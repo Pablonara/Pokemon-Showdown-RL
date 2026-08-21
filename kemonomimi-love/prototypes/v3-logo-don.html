@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V3 ロゴどん！ — kemonomimi.love</title>
+<!-- Original animation for kemonomimi.love. Anniversary-LP "logo-don" genre study. -->
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Mochiy+Pop+One&display=swap");
+  :root {
+    --pink: #ff94b4; --sky: #9edcf0; --hot: #ff5c8a; --sun: #ffd97a;
+    --lav: #cdbbf5; --mint: #b8e8d8; --ink: #2a2a45; --white: #fffdfa;
+    --snap: cubic-bezier(0.8, 0.05, 0.1, 0.98);
+    --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: "Mochiy Pop One", sans-serif; color: var(--ink); min-height: 100vh;
+    overflow: hidden; display: grid; place-items: center;
+    background: linear-gradient(180deg, #fff6fb, #eef7ff); }
+
+  /* ---------- rotating sunburst rays ---------- */
+  .rays { position: fixed; inset: -60vmax; margin: auto; width: 220vmax; height: 220vmax;
+    border-radius: 50%; opacity: 0; z-index: 0;
+    background: repeating-conic-gradient(rgba(255,148,180,.22) 0deg 7deg, transparent 7deg 14deg,
+      rgba(158,220,240,.2) 14deg 21deg, transparent 21deg 28deg); }
+  .play .rays { animation: raysIn .8s ease-out .2s both, spin 60s linear infinite; }
+  @keyframes raysIn { to { opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hero { position: relative; z-index: 2; text-align: center; padding: 24px; }
+
+  /* ---------- ribbon ---------- */
+  .ribbon { position: relative; display: inline-block; background: var(--hot); color: var(--white);
+    font-size: clamp(12px, 2.2vw, 15px); letter-spacing: .34em; text-indent: .34em;
+    padding: 11px 30px; }
+  .ribbon::before, .ribbon::after { content: ""; position: absolute; top: 7px; bottom: -7px; width: 26px;
+    background: #d94f6a; z-index: -1; }
+  .ribbon::before { left: -20px; clip-path: polygon(100% 0, 0 0, 42% 50%, 0 100%, 100% 100%); }
+  .ribbon::after { right: -20px; clip-path: polygon(0 0, 100% 0, 58% 50%, 100% 100%, 0 100%); }
+  .play .ribbon { animation: drop .5s var(--pop) .55s both; }
+  @keyframes drop { from { opacity: 0; transform: translateY(-46px) rotate(-3deg); } }
+
+  /* ---------- the don-don title ---------- */
+  h1 { font-family: "Dela Gothic One", sans-serif; line-height: 1.12; margin-top: 26px; }
+  h1 .l1, h1 .l2 { display: block; font-size: clamp(52px, 11.5vw, 118px); }
+  h1 .l1 { color: var(--hot);
+    text-shadow: 0.04em 0.04em 0 var(--white), 0.09em 0.09em 0 var(--sky); transform: rotate(-2deg); }
+  h1 .l2 { color: var(--ink);
+    text-shadow: 0.04em 0.04em 0 var(--white), 0.09em 0.09em 0 var(--pink); transform: rotate(-2deg); }
+  .play h1 .l1 { animation: donL .42s var(--pop) 1.0s both; }
+  .play h1 .l2 { animation: donR .42s var(--pop) 1.22s both; }
+  @keyframes donL { from { opacity: 0; transform: translateX(-90px) rotate(-9deg) scale(1.25); } to { opacity: 1; transform: rotate(-2deg); } }
+  @keyframes donR { from { opacity: 0; transform: translateX(90px) rotate(5deg) scale(1.25); } to { opacity: 1; transform: rotate(-2deg); } }
+
+  .sub { margin-top: 26px; font-size: clamp(13px, 2.4vw, 17px); letter-spacing: .2em; }
+  .play .sub { animation: rise .5s var(--snap) 1.95s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- celebration badge ---------- */
+  .iwai { position: absolute; top: -6px; left: clamp(-20px, 2vw, 46px); width: 118px; aspect-ratio: 1;
+    border-radius: 50%; background: var(--sun); border: 3px dashed var(--white);
+    outline: 3px solid var(--ink); display: grid; place-items: center; text-align: center;
+    font-size: 14px; line-height: 1.5; transform: rotate(-12deg); z-index: 3; }
+  .play .iwai { animation: slam .4s var(--pop) 1.7s both, yura 3s ease-in-out 2.2s infinite; }
+  @keyframes slam { from { opacity: 0; transform: scale(2.2) rotate(-30deg); } to { opacity: 1; transform: rotate(-12deg); } }
+  @keyframes yura { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(-6deg); } }
+
+  /* ---------- confetti ---------- */
+  .conf { position: fixed; top: -6vh; width: 11px; height: 15px; z-index: 1; opacity: 0; }
+  .play .conf { animation: confFall linear infinite; }
+  @keyframes confFall {
+    0%   { opacity: 0; transform: translateY(0) rotate(0) skewX(0); }
+    6%   { opacity: .9; }
+    50%  { transform: translateY(55vh) rotate(200deg) skewX(16deg); }
+    100% { opacity: .9; transform: translateY(112vh) rotate(400deg) skewX(-16deg); }
+  }
+  .conf:nth-child(1) { left: 6%;  background: var(--pink); animation-duration: 3.6s; animation-delay: 2.1s; }
+  .conf:nth-child(2) { left: 18%; background: var(--sun);  animation-duration: 4.4s; animation-delay: 2.5s; }
+  .conf:nth-child(3) { left: 31%; background: var(--mint); animation-duration: 3.9s; animation-delay: 2.2s; }
+  .conf:nth-child(4) { left: 44%; background: var(--lav);  animation-duration: 4.7s; animation-delay: 2.8s; }
+  .conf:nth-child(5) { left: 57%; background: var(--sky);  animation-duration: 3.7s; animation-delay: 2.35s; }
+  .conf:nth-child(6) { left: 69%; background: var(--hot);  animation-duration: 4.2s; animation-delay: 2.65s; }
+  .conf:nth-child(7) { left: 81%; background: var(--sun);  animation-duration: 3.5s; animation-delay: 2.15s; }
+  .conf:nth-child(8) { left: 92%; background: var(--pink); animation-duration: 4.6s; animation-delay: 2.9s; }
+
+  /* sparkle crosses */
+  .spark { position: fixed; width: 24px; aspect-ratio: 1; background: var(--white); z-index: 1;
+    clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }
+  .spark.k1 { top: 22%; left: 16%; } .spark.k2 { top: 58%; right: 14%; width: 17px; }
+  .spark.k3 { bottom: 18%; left: 30%; width: 15px; } .spark.k4 { top: 16%; right: 30%; }
+  .play .spark { animation: twinkle 1.7s ease-in-out infinite; }
+  .play .k2 { animation-delay: .45s; } .play .k3 { animation-delay: .85s; } .play .k4 { animation-delay: 1.25s; }
+  @keyframes twinkle { 0%, 100% { opacity: .2; transform: scale(.65) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(22deg); } }
+
+  .replay { position: fixed; right: 20px; bottom: 20px; z-index: 30;
+    font-family: "Mochiy Pop One", sans-serif; font-size: 13px; color: var(--ink);
+    background: var(--white); border: 2.5px solid var(--ink); border-radius: 999px;
+    padding: 11px 20px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); }
+  .replay:hover { transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
+  @media (max-width: 720px) { .iwai { width: 92px; font-size: 11.5px; top: -40px; } }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div class="rays"></div>
+  <i class="conf"></i><i class="conf"></i><i class="conf"></i><i class="conf"></i>
+  <i class="conf"></i><i class="conf"></i><i class="conf"></i><i class="conf"></i>
+  <span class="spark k1"></span><span class="spark k2"></span><span class="spark k3"></span><span class="spark k4"></span>
+
+  <main class="hero">
+    <span class="iwai">祝<br>M0たっせい!!</span>
+    <p class="ribbon">けもみみ研究所</p>
+    <h1><span class="l1">猫耳は、</span><span class="l2">最強。</span></h1>
+    <p class="sub">かわいいエージェント、ようしゃない方策。</p>
+  </main>
+
+  <button class="replay" onclick="replay()">もっかい！</button>
+  <script>
+    function replay(){ document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play"); }
+    addEventListener("load", () => document.body.classList.add("play"));
+  </script>
+</body>
+</html>

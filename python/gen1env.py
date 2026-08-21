@@ -19,6 +19,8 @@ _SUFFIX = "dylib" if sys.platform == "darwin" else "so"
 LIB = ROOT / "env" / "zig-out" / "lib" / f"libgen1env.{_SUFFIX}"
 
 N_ACTIONS = 10
+OBS_INTS = 80
+OBS_FLOATS = 224  # obs v3 (see env/src/main.zig layout comment)
 ACTION_NAMES = ["move 1", "move 2", "move 3", "move 4",
                 "switch 2", "switch 3", "switch 4", "switch 5", "switch 6", "move 0"]
 
@@ -64,7 +66,7 @@ class Gen1Env:
 
     def __init__(self, pool: str, n: int = 64, seed: int = 0):
         self._lib = _load()
-        assert self._lib.g1_version() == 2, "env version mismatch"
+        assert self._lib.g1_version() == 3, "env version mismatch"
         self._h = self._lib.g1_create(str(pool).encode(), n, seed)
         if not self._h:
             raise RuntimeError(f"g1_create failed (pool={pool})")
@@ -72,6 +74,7 @@ class Gen1Env:
         self._lib.g1_buffers(self._h, ctypes.byref(b))
         self.n = b.n
         self.n_actions = b.n_actions
+        assert (b.ints_per_player, b.floats_per_player) == (OBS_INTS, OBS_FLOATS)
         view = np.ctypeslib.as_array
         self.actions = view(b.actions, (n, 2))
         self.masks = view(b.masks, (n, 2, b.n_actions))

@@ -35,7 +35,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 POOL = str(ROOT / "teams" / "gen1-pool.bin")
 
 FIELDS = [  # slab name, per-row shape, dtype
-    ("mi", (80,), np.int32), ("mf", (160,), np.float32),
+    ("mi", (80,), np.int32), ("mf", (224,), np.float32),
     ("sp", (6,), np.int16), ("mv", (24,), np.int16), ("rev", (6,), np.uint8),
     ("mask", (N_ACTIONS,), np.uint8), ("act", (), np.int64), ("logp", (), np.float32),
 ]
@@ -266,6 +266,8 @@ def main():
     ap.add_argument("--heads", type=int, default=6)
     ap.add_argument("--out", default="runs/r4")
     ap.add_argument("--init", default=None, help="checkpoint to initialize from (e.g. BC)")
+    ap.add_argument("--init-expand", default=None,
+                    help="v1-obs checkpoint to load via zero-init column expansion")
     ap.add_argument("--wandb", default=None)
     ap.add_argument("--run-name", default=None)
     args = ap.parse_args()
@@ -283,6 +285,11 @@ def main():
         ckpt = torch.load(args.init, map_location=device, weights_only=True)
         model.load_state_dict(ckpt["model"])
         print(f"initialized from {args.init}", flush=True)
+    elif args.init_expand:
+        from model import load_expanded
+        ckpt = torch.load(args.init_expand, map_location=device, weights_only=True)
+        load_expanded(model, ckpt["model"])
+        print(f"initialized from {args.init_expand} (expanded to obs v3)", flush=True)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"device={device} params={n_params / 1e6:.2f}M envs={args.envs} amp={amp}", flush=True)
