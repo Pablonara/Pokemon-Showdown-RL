@@ -189,18 +189,24 @@ class Opponents:
         return m
 
 
-def gae(vals, ret, gamma, lam):
-    """Terminal-reward GAE over one episode. vals (T,), scalar terminal ret."""
-    T = len(vals)
-    adv = np.zeros(T, np.float32)
-    last = 0.0
-    for t in range(T - 1, -1, -1):
-        v_next = 0.0 if t == T - 1 else vals[t + 1]
-        r = ret if t == T - 1 else 0.0
-        delta = r + gamma * v_next - vals[t]
-        last = delta + gamma * lam * last
-        adv[t] = last
-    return adv
+def gae_batch(vals, rets, lens, gamma, lam):
+    """Vectorized terminal-reward GAE. vals (B,T) padded, rets (B,), lens (B,).
+    Returns adv (B,T) with zeros beyond each episode's length."""
+    B, T = vals.shape
+    valid = np.arange(T)[None, :] < lens[:, None]
+    last_t = lens - 1
+    v_next = np.zeros_like(vals)
+    v_next[:, :-1] = vals[:, 1:]
+    v_next[np.arange(B), last_t] = 0.0  # terminal
+    r = np.zeros_like(vals)
+    r[np.arange(B), last_t] = rets
+    delta = (r + gamma * v_next - vals) * valid
+    adv = np.zeros_like(vals)
+    last = np.zeros(B, dtype=vals.dtype)
+    for t in range(T - 1, -1, -1):  # scan over T (<=128), vectorized over B
+        last = delta[:, t] + gamma * lam * last * valid[:, t]
+        adv[:, t] = last
+    return adv * valid
 
 
 def batches_of(eps, token_budget):
@@ -403,27 +409,38 @@ def main():
         padded = [pad_batch(b, device) for b in batches]
 
         with torch.no_grad():
+            adv_sum, adv_sq, adv_n = 0.0, 0.0, 0
             for batch, (t, lens, ret, valid) in zip(batches, padded):
+                B = len(batch)
                 with autocast():
                     emb = model.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
-                    h = model.forward_seq(emb.view(len(batch), -1, model.d), lens)
-                    val = model.v(h).squeeze(-1).float().cpu().numpy()
-                for b, e in enumerate(batch):
-                    T = len(e["act"])
-                    e["adv"] = gae(val[b, :T], e["ret"], args.gamma, args.lam)
-                    e["vtarget"] = (e["adv"] + val[b, :T]).astype(np.float32)
-        all_adv = np.concatenate([e["adv"] for e in eps])
-        mu, sd = all_adv.mean(), all_adv.std() + 1e-8
-        for batch, (t, lens, ret, valid) in zip(batches, padded):
-            t["adv"] = torch.zeros_like(t["logp"])
-            t["vtarget"] = torch.zeros_like(t["logp"])
-            for b, e in enumerate(batch):
-                T = len(e["act"])
-                t["adv"][b, :T] = torch.from_numpy((e["adv"] - mu) / sd).to(device)
-                t["vtarget"][b, :T] = torch.from_numpy(e["vtarget"]).to(device)
+                    h = model.forward_seq(emb.view(B, -1, model.d), lens)
+                    val = model.v(h).squeeze(-1).float()
+                    if anchor is not None:  # frozen within the iteration: compute once
+                        a_emb = anchor.embed_step(
+                            t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
+                        a_h = anchor.forward_seq(a_emb.view(B, -1, model.d), lens)
+                        a_logits = anchor.pi(a_h).float().masked_fill(t["mask"] == 0, -1e9)
+                        t["anchor_logp"] = F.log_softmax(a_logits, -1)
+                v_np = val.cpu().numpy()
+                lens_np = lens.cpu().numpy()
+                rets_np = ret.cpu().numpy().astype(np.float32)
+                adv = gae_batch(v_np, rets_np, lens_np, args.gamma, args.lam)
+                t["adv"] = torch.from_numpy(adv).to(device)
+                t["vtarget"] = (t["adv"] + val) * valid
+                adv_sum += float(adv.sum())
+                adv_sq += float((adv * adv).sum())
+                adv_n += int(lens_np.sum())
+        mu = adv_sum / max(adv_n, 1)
+        sd = (max(adv_sq / max(adv_n, 1) - mu * mu, 1e-12)) ** 0.5 + 1e-8
+        for _, (t, lens, ret, valid) in zip(batches, padded):
+            t["adv"] = ((t["adv"] - mu) / sd) * valid
 
         model.train()
-        agg = dict(pg=0.0, vf=0.0, ent=0.0, kl=0.0, sp=0.0, mv=0.0, spacc=0.0, nb=0)
+        # metric accumulators stay on-GPU; a single host sync per iteration
+        agg = {k: torch.zeros((), device=device)
+               for k in ("pg", "vf", "ent", "kl", "sp", "mv", "spacc", "dmg")}
+        nb = 0
         t_train = time.time()
         for _ in range(args.epochs):
             order = np.random.permutation(len(padded))
@@ -447,13 +464,8 @@ def main():
                 vf = (F.mse_loss(val, vtarget, reduction="none") * valid).sum() / nvalid
                 ent = (dist.entropy() * valid).sum() / nvalid
                 akl = torch.zeros((), device=device)
-                if anchor is not None:
-                    with torch.no_grad(), autocast():
-                        a_emb = anchor.embed_step(t["mi"].view(-1, OBS_INTS), t["mf"].view(-1, OBS_FLOATS))
-                        a_h = anchor.forward_seq(a_emb.view(B, T, model.d), lens)
-                        a_logits = anchor.pi(a_h).float().masked_fill(t["mask"] == 0, -1e9)
-                    a_logp = F.log_softmax(a_logits, -1)
-                    kl_ref = (dist.probs * (dist.logits - a_logp)).sum(-1)
+                if anchor is not None:  # anchor log-probs precomputed in the pre-pass
+                    kl_ref = (dist.probs * (dist.logits - t["anchor_logp"])).sum(-1)
                     akl = (kl_ref * valid).sum() / nvalid
                 sp_t = t["sp"].long().masked_fill(~valid[..., None] | (t["sp"] < 1), -100)
                 sp = F.cross_entropy(sp_logits.reshape(-1, 152), sp_t.reshape(-1),
@@ -481,17 +493,18 @@ def main():
                 with torch.no_grad():
                     unrev = valid[..., None] & (t["rev"] == 0) & (t["sp"] > 0)
                     if unrev.any():
-                        agg["spacc"] += (sp_logits.argmax(-1) == t["sp"])[unrev].float().mean().item()
-                    agg["kl"] += ((t["logp"] - logp) * valid).sum().item() / nvalid.item()
-                for key, tv in (("pg", pg), ("vf", vf), ("ent", ent), ("sp", sp), ("mv", mv)):
-                    agg[key] += tv.item()
-                agg["dmg"] = agg.get("dmg", 0.0) + dmg.item()
-                agg["nb"] += 1
+                        agg["spacc"] += (sp_logits.argmax(-1) == t["sp"])[unrev].float().mean()
+                    agg["kl"] += ((t["logp"] - logp) * valid).sum() / nvalid
+                    for key, tv in (("pg", pg), ("vf", vf), ("ent", ent),
+                                    ("sp", sp), ("mv", mv), ("dmg", dmg)):
+                        agg[key] += tv.detach()
+                nb += 1
 
         if anchor is not None and it % args.anchor_every == 0:
             anchor.load_state_dict(model.state_dict())  # move the magnet
 
-        nb = max(agg["nb"], 1)
+        agg = {k: float(v) for k, v in agg.items()}  # single host sync
+        nb = max(nb, 1)
         metrics = {
             **opps.metrics(),
             "rows": n_rows, "episodes": len(eps),

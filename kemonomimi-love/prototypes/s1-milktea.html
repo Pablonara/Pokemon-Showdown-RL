@@ -170,10 +170,6 @@
     transform: translateX(-101%); transition: transform .3s var(--snap); }
   .replay:hover::before { transform: none; }
 
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; }
-    .pre { opacity: 1; transform: none; }
-  }
 </style>
 </head>
 <body>
@@ -267,7 +263,7 @@
   <button class="replay" onclick="replayIntro()"><span class="jp">もういちど</span><span class="en">OPENING</span></button>
 
   <script>
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = false; /* モーション全開、にゃ〜 */
     function skipIntro(){ document.documentElement.classList.remove("boot");
       document.body.classList.remove("play"); document.body.classList.add("skipped"); }
     function replayIntro(){ document.body.classList.remove("skipped");
