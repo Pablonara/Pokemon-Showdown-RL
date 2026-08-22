@@ -6,9 +6,11 @@ Usage: python3 python/head2head.py <ckptA> <ckptB> [--episodes 400] [--greedy]
 """
 
 import argparse
+import json
 import math
 import pathlib
 import sys
+from collections import Counter
 
 import numpy as np
 import torch
@@ -35,8 +37,67 @@ def load(path, device):
     return m.eval()
 
 
+class Stats:
+    """Blind-spot report accumulator: what does A do in wins vs losses?"""
+
+    def __init__(self):
+        self.ep = {}
+        self.agg = {k: {"n": 0, "turns": [], "am": Counter(), "bm": Counter(),
+                        "asw": 0, "amv": 0} for k in ("win", "loss", "draw")}
+
+    def _mid(self, env, i, p, slot):
+        mf = env.m_floats[i, p]
+        j = int(np.argmax([mf[b * 13 + 2] for b in range(6)]))  # active block
+        return int(env.m_ints[i, p, j * 6 + 2 + slot])
+
+    def record(self, env, p, a_player, rows, acts):
+        for i, a in zip(rows, acts):
+            e = self.ep.setdefault(int(i), {"am": Counter(), "bm": Counter(),
+                                            "asw": 0, "amv": 0, "turn": 0.0})
+            e["turn"] = float(env.m_floats[i, p, 214]) * 500  # env resets on done
+            if p == a_player:
+                if a < 4:
+                    e["am"][self._mid(env, i, p, int(a))] += 1
+                    e["amv"] += 1
+                else:
+                    e["asw"] += 1
+            elif a < 4:
+                e["bm"][self._mid(env, i, p, int(a))] += 1
+
+    def done(self, env, i, a_player):
+        e = self.ep.pop(int(i), None)
+        if e is None:
+            return
+        r = env.rewards[i, a_player]
+        k = "win" if r == 1 else ("draw" if r == 0 else "loss")
+        g = self.agg[k]
+        g["n"] += 1
+        g["turns"].append(e["turn"])
+        g["am"].update(e["am"])
+        g["bm"].update(e["bm"])
+        g["asw"] += e["asw"]
+        g["amv"] += e["amv"]
+
+    def report(self, names):
+        def top(c, n=6):
+            tot = max(1, sum(c.values()))
+            return ", ".join(f"{names.get(m, m)} {100 * v / tot:.0f}%"
+                             for m, v in c.most_common(n))
+        for k in ("win", "loss", "draw"):
+            g = self.agg[k]
+            if not g["n"]:
+                print(f"A-{k}: n=0")
+                continue
+            t = np.array(g["turns"])
+            sw = g["asw"] / max(1, g["asw"] + g["amv"])
+            print(f"A-{k}: n={g['n']} turns p50/p90 {np.median(t):.0f}/"
+                  f"{np.percentile(t, 90):.0f} switch-rate {sw:.2f}\n"
+                  f"  A used: {top(g['am'])}\n  B used: {top(g['bm'])}")
+
+
 @torch.no_grad()
-def play(models, device, episodes, greedy, n_envs=256, seed=42):
+def play(models, device, episodes, greedy, n_envs=256, seed=42,
+         stats=None, a_player=0):
     """models[0] plays P1, models[1] plays P2; returns models[0] wins/draws."""
     env = Gen1Env(POOL, n=n_envs, seed=seed)
     caches = [m.new_cache(n_envs, device) for m in models]
@@ -51,13 +112,19 @@ def play(models, device, episodes, greedy, n_envs=256, seed=42):
                        torch.from_numpy(env.m_floats[rows, p]).to(device), cache, idx)
             dist = masked_dist(m.pi(h), torch.from_numpy(env.masks[rows, p]).to(device))
             acts = dist.probs.argmax(-1) if greedy else dist.sample()
-            env.actions[rows, p] = acts.cpu().numpy()
+            acts = acts.cpu().numpy()
+            env.actions[rows, p] = acts
+            if stats is not None:
+                stats.record(env, p, a_player, rows, acts)
         env.step()
         done = np.flatnonzero(env.dones)
         if len(done):
             total += len(done)
             wins += int((env.rewards[done, 0] == 1).sum())
             draws += int((env.rewards[done, 0] == 0).sum())
+            if stats is not None:
+                for i in done:
+                    stats.done(env, i, a_player)
             t = torch.from_numpy(done).to(device)
             for cache in caches:
                 cache.reset(t)
@@ -79,18 +146,27 @@ def main():
     ap.add_argument("b")
     ap.add_argument("--episodes", type=int, default=400)
     ap.add_argument("--greedy", action="store_true")
+    ap.add_argument("--stats", action="store_true",
+                    help="blind-spot report: moves/lengths split by outcome")
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     A, B = load(args.a, device), load(args.b, device)
+    st = Stats() if args.stats else None
 
-    w1, d1, n1 = play([A, B], device, args.episodes // 2, args.greedy, seed=42)
-    w2, d2, n2 = play([B, A], device, args.episodes // 2, args.greedy, seed=42)
+    w1, d1, n1 = play([A, B], device, args.episodes // 2, args.greedy, seed=42,
+                      stats=st, a_player=0)
+    w2, d2, n2 = play([B, A], device, args.episodes // 2, args.greedy, seed=42,
+                      stats=st, a_player=1)
     wins = w1 + (n2 - w2 - d2)  # A's wins as P1 + A's wins as P2
     n = n1 + n2
     lo, hi = wilson(wins, n)
     print(f"{pathlib.Path(args.a).name} vs {pathlib.Path(args.b).name} "
           f"({'greedy' if args.greedy else 'sampled'}, n={n}): "
           f"A wins {wins / n:.3f} [{lo:.3f}, {hi:.3f}], draws {(d1 + d2) / n:.3f}")
+    if st is not None:
+        names = {int(k): v["name"] for k, v in
+                 json.load(open(ROOT / "data" / "gen1.json"))["moves"].items()}
+        st.report(names)
 
 
 if __name__ == "__main__":
