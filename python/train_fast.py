@@ -336,6 +336,9 @@ def main():
                     help="add a frozen self-snapshot to the league every N iters")
     ap.add_argument("--anchor-kl", type=float, default=0.02)
     ap.add_argument("--anchor-every", type=int, default=150)
+    ap.add_argument("--anchor-fixed", action="store_true",
+                    help="anchor stays at init (drift arrest for exploiters "
+                         "vs too-strong targets); default: moving magnet")
     ap.add_argument("--dmg", type=float, default=1.0, help="damage-prediction aux weight")
     ap.add_argument("--hot-frac", type=float, default=0.15,
                     help="fraction of mirror envs sampled at high temperature (state diversity)")
@@ -576,7 +579,7 @@ def main():
                         agg[key] += tv.detach()
                 nb += 1
 
-        if anchor is not None and it % args.anchor_every == 0:
+        if anchor is not None and it % args.anchor_every == 0 and not args.anchor_fixed:
             anchor.load_state_dict(model.state_dict())  # move the magnet
         if args.snapshot_every and it % args.snapshot_every == 0:
             opps.add_snapshot(model, it)
