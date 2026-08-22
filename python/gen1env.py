@@ -66,7 +66,7 @@ class Gen1Env:
 
     def __init__(self, pool: str, n: int = 64, seed: int = 0):
         self._lib = _load()
-        assert self._lib.g1_version() == 4, "env version mismatch"
+        assert self._lib.g1_version() == 5, "env version mismatch"
         self._h = self._lib.g1_create(str(pool).encode(), n, seed)
         if not self._h:
             raise RuntimeError(f"g1_create failed (pool={pool})")

@@ -39,7 +39,23 @@ const Choice = pkmn.Choice;
 const Player = pkmn.Player;
 const Result = pkmn.Result;
 
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 5;
+
+/// Opponent hp as the ladder shows it: integer percent, min 1 while alive
+/// (same integer math as PS getHealth).
+fn pubHpPct(hp: u16, maxhp: u16) f32 {
+    if (hp == 0 or maxhp == 0) return 0;
+    const pct = @max(1, @as(u32, hp) * 100 / maxhp);
+    return @as(f32, @floatFromInt(pct)) / 100.0;
+}
+
+/// Opponent max hp as the deployment bot estimates it (identical formula):
+/// randbats spread ev=63/iv=30; exact for standard sets, +-2hp on tweaked.
+fn estMaxHP(species_num: i32, level: u8) f32 {
+    if (species_num <= 0) return 0;
+    const base: u32 = gen1.Species.get(@enumFromInt(@as(u8, @intCast(species_num)))).stats.hp;
+    return @floatFromInt((2 * base + 30 + 63 + 100) * @as(u32, level) / 100 + 10);
+}
 
 /// Ladder-visible status byte: the engine's sleep countdown (low 3 bits) is
 /// server-side hidden RNG, so any sleep is canonicalized to a fixed "asleep,
@@ -155,6 +171,8 @@ const EnvState = struct {
     result: Result,
     battle_idx: u64, // global battle counter (teams 2k, 2k+1; seed f(env_seed, k))
     revealed: [2][6]bool, // by original party index (order-invariant)
+    reveal_seq: [2][6]u8, // mon ids in first-reveal order (ladder-visible order)
+    reveal_n: [2]u8,
     usage: [2][6][4]u8, // move selection counts (masking: >0 = revealed)
     events: [2][3]bool, // per player since last expose: [attempted, missed, crit]
     last_move_side: u8, // walker state for LastMiss attribution (2 = none)
@@ -269,6 +287,8 @@ pub const Env = struct {
             .result = .{},
             .battle_idx = k,
             .revealed = @splat(@splat(false)),
+            .reveal_seq = @splat(@splat(0)),
+            .reveal_n = @splat(0),
             .usage = @splat(@splat(@splat(0))),
             .events = @splat(@splat(false)),
             .last_move_side = 2,
@@ -471,7 +491,12 @@ pub const Env = struct {
             };
             // mark both actives revealed (lazily covers every switch-in)
             const side = s.battle.side(player);
-            if (side.order[0] > 0) s.revealed[p][side.order[0] - 1] = true;
+            const aid = side.order[0];
+            if (aid > 0 and !s.revealed[p][aid - 1]) {
+                s.revealed[p][aid - 1] = true;
+                s.reveal_seq[p][s.reveal_n[p]] = aid;
+                s.reveal_n[p] += 1;
+            }
         }
         inline for (.{ Player.P1, Player.P2 }, 0..) |player, p| {
             env.encode(i, player, p);
@@ -489,6 +514,35 @@ pub const Env = struct {
     const OPP_LSM_INT = 78;
     const OPP_PRIVATE_F = [2]usize{ 209, 214 };
 
+    /// Foe mon-block order as the ladder client sees it: active first, then
+    /// first-reveal order; unrevealed trail in engine order (belief targets
+    /// only - their masked blocks are zeroed).
+    fn foeOrder(s: *const EnvState, side: *const gen1.Side, opp: usize) [6]u8 {
+        var out: [6]u8 = @splat(0);
+        var n: usize = 0;
+        const active = side.order[0];
+        if (active != 0) {
+            out[0] = active;
+            n = 1;
+        }
+        for (0..s.reveal_n[opp]) |k| {
+            const id = s.reveal_seq[opp][k];
+            if (id != active) {
+                out[n] = id;
+                n += 1;
+            }
+        }
+        outer: for (side.order) |id| {
+            if (id == 0) continue;
+            for (out[0..n]) |x| {
+                if (x == id) continue :outer;
+            }
+            out[n] = id;
+            n += 1;
+        }
+        return out;
+    }
+
     fn maskObs(env: *Env, i: u32, player: Player, p: usize) void {
         const base = (i * 2 + @as(u32, @intCast(p)));
         const ti = env.ints[base * INTS_PER_PLAYER ..][0..INTS_PER_PLAYER];
@@ -501,10 +555,11 @@ pub const Env = struct {
         const s = &env.states[i];
         const opp: usize = @intFromEnum(player.foe());
         const side = s.battle.side(player.foe());
+        const ord = foeOrder(s, side, opp);
         for (0..6) |j| {
             const ii = 36 + j * 6;
             const fi = 6 * MON_F + j * MON_F;
-            const id = side.order[j];
+            const id = ord[j];
             if (id == 0) continue;
             if (!s.revealed[opp][id - 1]) {
                 @memset(mi[ii .. ii + 6], 0);
@@ -515,6 +570,9 @@ pub const Env = struct {
                     if (s.usage[opp][id - 1][k] == 0) mi[ii + 2 + k] = 0;
                 }
                 @memset(mf[fi + 4 .. fi + 8], 0); // exact pp hidden
+                const mon = &side.pokemon[id - 1];
+                mf[fi] = pubHpPct(mon.hp, mon.stats.hp); // integer-percent hp
+                mf[fi + 8] = estMaxHP(mi[ii], mon.level) / 1000.0;
             }
         }
         mi[OPP_LSM_INT] = 0;
@@ -533,9 +591,12 @@ pub const Env = struct {
         const sides = [2]*const gen1.Side{ s.battle.side(player), s.battle.foe(player) };
         const pidx = [2]usize{ @intFromEnum(player), @intFromEnum(player.foe()) };
 
-        for (sides, pidx) |side, sp| {
+        for (sides, pidx, 0..) |side, sp, si| {
+            // foe blocks in ladder-visible reveal order (true+masked stay
+            // block-aligned for the belief targets)
+            const ord: ?[6]u8 = if (si == 1) foeOrder(s, side, sp) else null;
             for (1..7) |slot| {
-                const id = side.order[slot - 1];
+                const id = if (ord) |o| o[slot - 1] else side.order[slot - 1];
                 if (id == 0) { // absent (never in randbats; keep layout stable)
                     ii += 6;
                     fi += MON_F;

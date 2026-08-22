@@ -64,6 +64,7 @@ class Battle {
     this.request = null;
     this.opp = []; // [{num, level, hp, status, moves:Map(num->uses), active}]
     this.myUsage = new Map(); // speciesNum -> Map(moveNum -> uses)
+    this.ppCache = new Map(); // speciesNum -> [pp1..4]/63 (last seen active)
     this.boosts = {p1: {}, p2: {}};
     this.vols = {p1: {}, p2: {}};
     this.lastUsed = {p1: 0, p2: 0};
@@ -191,8 +192,10 @@ class Battle {
       floats[fi + 1] = +(p.details.match(/, L(\d+)/)?.[1] ?? 100) / 100;
       floats[fi + 2] = p.active ? 1 : 0;
       floats[fi + 3] = 1;
-      // pp only present on the active request block; approximate bench pp as full
-      floats[fi + 4] = floats[fi + 5] = floats[fi + 6] = floats[fi + 7] = 1;
+      // pp exact for active (request) and cached-from-last-active for bench
+      // (gen1 bench pp never changes); full only if never seen active
+      const cached = this.ppCache.get(spNum);
+      for (let k = 0; k < 4; k++) floats[fi + 4 + k] = cached ? cached[k] : 1;
       // max hp: exact from own absolute condition string (e.g. "282/282")
       const abs = p.condition.match(/\/(\d+)/);
       floats[fi + 8] = (abs ? +abs[1] : estMaxHP(spNum,
@@ -203,9 +206,13 @@ class Battle {
       });
     });
     if (req.active?.[0]?.moves) {
+      const aSp = SPECIES.get(norm(
+        req.side.pokemon.find(p => p.active)?.details.split(',')[0] ?? '')) ?? 0;
+      const pp = [1, 1, 1, 1];
       req.active[0].moves.forEach((m, k) => {
-        if (k < 4) floats[4 + k] = (m.pp ?? 63) / 63;
+        if (k < 4) floats[4 + k] = pp[k] = (m.pp ?? 63) / 63;
       });
+      this.ppCache.set(aSp, pp);
     }
     // opponent side (blocks 6-11): active first, then reveal order
     const opp = [...this.opp].sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
