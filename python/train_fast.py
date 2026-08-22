@@ -528,7 +528,8 @@ def main():
         msg = (f"it {it} rows {slab.ptr} ({metrics['rows_per_s']:.0f}/s) "
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "
                f"pg {metrics['loss/pg']:.4f} vf {metrics['loss/vf']:.4f} "
-               f"ent {metrics['loss/entropy']:.3f} spacc {metrics['belief/sp_acc_unrevealed']:.3f}")
+               f"ent {metrics['loss/entropy']:.3f} spacc {metrics['belief/sp_acc_unrevealed']:.3f}"
+               + (f" wrF {opponents.wr_frozen:.3f}" if opponents.frozen is not None else ""))
         if it % args.eval_every == 0 or it == args.iters:
             model.eval()
             wr, _ = evaluate(model, device, amp, RandomPolicy(1))
