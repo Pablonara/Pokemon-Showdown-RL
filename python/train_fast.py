@@ -97,19 +97,22 @@ class Opponents:
 
     def __init__(self, args, device, amp, n_envs):
         self.device, self.amp = device, amp
-        self.pool = [("maxdmg", MaxDamagePolicy()), ("random", RandomPolicy(7))]
-        self.wr = np.full(len(self.pool), 0.5)  # learner winrate EMA per opponent
         self.self_share = args.self_share
         self.hot_frac = getattr(args, "hot_frac", 0.0)
         self.hot = np.zeros(n_envs, bool)
         self.opp = np.full(n_envs, -1, dtype=np.int64)
         self.cap = getattr(args, "league_cap", 8)
-        # frozen league pool: N same-arch members share ONE env-keyed KV cache
-        # (an env talks to exactly one member per episode; slot reset on done)
-        self.members = []          # [name, ...] parallel to model list
-        self.mmodels = []
+        # ONE unified opponent pool under ONE PFSP law (dominant opponents of
+        # any kind autoscale their share). Model members: N same-arch frozen
+        # nets sharing ONE env-keyed KV cache (an env talks to exactly one
+        # member per episode; slot reset on done). Script members: python
+        # policies, playable on any env. Scripted canary metrics come from
+        # evaluate(), independent of training exposure.
+        self.members = []          # names; parallel to mmodels/policies/wr_m
+        self.mmodels = []          # torch model or None
+        self.policies = []         # scripted policy or None
         self.wr_m = np.zeros(0)    # learner winrate EMA per member
-        self.midx = np.full(n_envs, -1, dtype=np.int64)  # member per block env
+        self.midx = np.full(n_envs, -1, dtype=np.int64)  # member per pool env
         self.block = np.zeros(n_envs, dtype=bool)
         self.fcache = None
         if args.league:
@@ -119,6 +122,11 @@ class Opponents:
             for path in args.league.split(","):
                 name = "/".join(pathlib.Path(path).with_suffix("").parts[-2:])
                 self.add_member(name, self._load(path))
+        if args.league and args.league_share < 1.0:
+            # full-block runs = dedicated exploiters: pure target, no dilution
+            self.add_member("maxdmg", None, policy=MaxDamagePolicy())
+            self.add_member("random", None, policy=RandomPolicy(7))
+        self.script_idx = [k for k, p in enumerate(self.policies) if p is not None]
         for i in range(n_envs):
             self.resample(i)
 
@@ -138,17 +146,20 @@ class Opponents:
             load_expanded(m, ckpt["model"])
         return m
 
-    def add_member(self, name, model):
-        """Add a frozen member; at cap, evict the most-mastered snapshot."""
-        model.eval()
-        for p in model.parameters():
-            p.requires_grad_(False)
-        if self.fcache is None:
-            n_block = int(self.block.sum())
-            self.fcache = model.new_cache(
-                n_block, self.device,
-                torch.bfloat16 if self.amp else torch.float32)
-        if len(self.members) >= self.cap:
+    def add_member(self, name, model, policy=None):
+        """Add a pool member; at cap, evict the most-mastered snapshot.
+        Scripted members don't count toward (or trigger) the cap."""
+        if model is not None:
+            model.eval()
+            for p in model.parameters():
+                p.requires_grad_(False)
+            if self.fcache is None:
+                n_block = int(self.block.sum())
+                self.fcache = model.new_cache(
+                    n_block, self.device,
+                    torch.bfloat16 if self.amp else torch.float32)
+        n_models = sum(m is not None for m in self.mmodels)
+        if model is not None and n_models >= self.cap:
             snaps = [k for k, n in enumerate(self.members) if n.startswith("snap")]
             if not snaps:  # cap misconfigured below initial member count
                 return
@@ -163,50 +174,54 @@ class Opponents:
         else:
             self.members.append(name)
             self.mmodels.append(model)
+            self.policies.append(policy)
             self.wr_m = np.append(self.wr_m, 0.5)
 
     def add_snapshot(self, model, it):
         import copy
         self.add_member(f"snap{it:05d}", copy.deepcopy(model))
+        self.script_idx = [k for k, p in enumerate(self.policies) if p is not None]
 
-    def _pfsp_draw(self):
-        h = (1.0 - self.wr_m) ** 2
-        p = 0.5 / len(self.members) + 0.5 * h / max(h.sum(), 1e-9)
-        return int(np.random.choice(len(self.members), p=p / p.sum()))
+    def _pfsp_draw(self, idx):
+        """PFSP over member subset idx: 0.5 uniform + 0.5 hard-weighted.
+        A dominant opponent (w->0) autoscales toward the whole share."""
+        w = self.wr_m[idx]
+        h = (1.0 - w) ** 2
+        p = 0.5 / len(idx) + 0.5 * h / max(h.sum(), 1e-9)
+        return int(np.random.choice(idx, p=p / p.sum()))
 
     def resample(self, i):
-        if self.block[i]:
-            self.opp[i] = 100  # frozen block marker
-            self.midx[i] = self._pfsp_draw()
+        if self.block[i]:  # pool env: any member (models need the block cache)
+            self.opp[i] = 100
+            self.midx[i] = self._pfsp_draw(np.arange(len(self.members)))
             self.hot[i] = False
             return
-        if np.random.random() < self.self_share:
-            self.opp[i] = -1
-            # hot lane: some mirror games sample at high temperature to widen
-            # the visited-state distribution (IS-corrected via stored logp)
-            self.hot[i] = np.random.random() < self.hot_frac
-            return
-        self.opp[i] = np.random.choice(len(self.pool), p=(w := 1.05 - self.wr) / w.sum())
-        self.hot[i] = False
+        # everything non-pool is mirror: two lanes total (mirror | one pool)
+        self.opp[i] = -1
+        self.midx[i] = -1
+        # hot lane: some mirror games sample at high temperature to widen
+        # the visited-state distribution (IS-corrected via stored logp)
+        self.hot[i] = np.random.random() < self.hot_frac
 
     def record(self, i, learner_reward):
         win = float(learner_reward > 0)
-        if self.block[i]:
+        if self.opp[i] >= 0:
             k = self.midx[i]
             self.wr_m[k] += 0.005 * (win - self.wr_m[k])
-        elif self.opp[i] >= 0:
-            k = self.opp[i]
-            self.wr[k] += 0.005 * (win - self.wr[k])
         self.resample(i)
 
     def act(self, env):
         """Fills player-1 actions for all non-mirror envs that need one."""
         need1 = env.needs[:, 1] > 0
-        for k, (_, pol) in enumerate(self.pool):
-            for i in np.flatnonzero(need1 & (self.opp == k) & ~self.block):
+        pool_env = self.opp == 100
+        for k in self.script_idx:
+            pol = self.policies[k]
+            for i in np.flatnonzero(need1 & pool_env & (self.midx == k)):
                 env.actions[i, 1] = pol.act(env.m_ints[i, 1], env.m_floats[i, 1],
                                             env.masks[i, 1])
         for k, m in enumerate(self.mmodels):
+            if m is None:
+                continue
             rows = np.flatnonzero(need1 & self.block & (self.midx == k))
             if not len(rows):
                 continue
@@ -233,13 +248,15 @@ class Opponents:
         return p == 0 or self.opp[i] == -1
 
     def metrics(self):
-        m = {f"league/wr_{name}": self.wr[k] for k, (name, _) in enumerate(self.pool)}
-        m["league/mirror_frac"] = float((self.opp == -1).mean())
-        m["league/hot_frac"] = float(self.hot.mean())
+        m = {"league/mirror_frac": float((self.opp == -1).mean()),
+             "league/hot_frac": float(self.hot.mean())}
+        model_wrs = []
         for k, name in enumerate(self.members):
             m[f"league/wr_{name}"] = self.wr_m[k]
-        if len(self.members):
-            m["league/wr_frozen"] = float(self.wr_m.mean())
+            if self.mmodels[k] is not None:
+                model_wrs.append(self.wr_m[k])
+        if model_wrs:
+            m["league/wr_frozen"] = float(np.mean(model_wrs))
         return m
 
 
@@ -309,7 +326,8 @@ def main():
     ap.add_argument("--gamma", type=float, default=0.999)
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--draw-penalty", type=float, default=0.3)
-    ap.add_argument("--self-share", type=float, default=0.7)
+    ap.add_argument("--self-share", type=float, default=0.7,
+                    help="DEPRECATED (ignored): non-pool envs are all mirror")
     ap.add_argument("--league", default=None,
                     help="frozen checkpoint opponent(s), comma-separated")
     ap.add_argument("--league-share", type=float, default=0.1)
@@ -585,7 +603,8 @@ def main():
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "
                f"pg {metrics['loss/pg']:.4f} vf {metrics['loss/vf']:.4f} "
                f"ent {metrics['loss/entropy']:.3f} spacc {metrics['belief/sp_acc_unrevealed']:.3f}"
-               + (f" wrF {float(opps.wr_m.mean()):.3f}" if len(opps.members) else ""))
+               + (f" wrF {metrics['league/wr_frozen']:.3f}"
+                  if "league/wr_frozen" in metrics else ""))
         if it % args.eval_every == 0 or it == args.iters:
             model.eval()
             wr, _ = evaluate(model, device, amp, RandomPolicy(1))
