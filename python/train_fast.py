@@ -103,35 +103,81 @@ class Opponents:
         self.hot_frac = getattr(args, "hot_frac", 0.0)
         self.hot = np.zeros(n_envs, bool)
         self.opp = np.full(n_envs, -1, dtype=np.int64)
-        self.frozen = None
+        self.cap = getattr(args, "league_cap", 8)
+        # frozen league pool: N same-arch members share ONE env-keyed KV cache
+        # (an env talks to exactly one member per episode; slot reset on done)
+        self.members = []          # [name, ...] parallel to model list
+        self.mmodels = []
+        self.wr_m = np.zeros(0)    # learner winrate EMA per member
+        self.midx = np.full(n_envs, -1, dtype=np.int64)  # member per block env
         self.block = np.zeros(n_envs, dtype=bool)
+        self.fcache = None
         if args.league:
-            ckpt = torch.load(args.league, map_location=device, weights_only=True)
-            cfg = ckpt.get("config", {})
-            self.frozen = Model(cfg.get("d", 384), cfg.get("e_layers", 3),
-                                cfg.get("t_layers", 6), cfg.get("heads", 6),
-                                dex_feats=cfg.get("dex_feats", False)).to(device)
-            if ckpt["model"]["mon_in.weight"].shape == self.frozen.mon_in.weight.shape:
-                # older checkpoints predate the dmg aux head (unused when acting)
-                missing, unexpected = self.frozen.load_state_dict(ckpt["model"], strict=False)
-                assert not unexpected and all(k.startswith("dmg.") for k in missing), \
-                    (missing, unexpected)
-            else:  # v1-obs checkpoint: expand (function-preserving)
-                from model import load_expanded
-                load_expanded(self.frozen, ckpt["model"])
-            self.frozen.eval()
             n_block = max(1, int(n_envs * args.league_share))
             self.block[-n_block:] = True
             self.block_base = n_envs - n_block
-            self.fcache = self.frozen.new_cache(
-                n_block, device, torch.bfloat16 if amp else torch.float32)
-            self.wr_frozen = 0.5
+            for path in args.league.split(","):
+                name = "/".join(pathlib.Path(path).with_suffix("").parts[-2:])
+                self.add_member(name, self._load(path))
         for i in range(n_envs):
             self.resample(i)
+
+    def _load(self, path):
+        ckpt = torch.load(path, map_location=self.device, weights_only=True)
+        cfg = ckpt.get("config", {})
+        m = Model(cfg.get("d", 384), cfg.get("e_layers", 3),
+                  cfg.get("t_layers", 6), cfg.get("heads", 6),
+                  dex_feats=cfg.get("dex_feats", False)).to(self.device)
+        if ckpt["model"]["mon_in.weight"].shape == m.mon_in.weight.shape:
+            # older checkpoints predate the dmg aux head (unused when acting)
+            missing, unexpected = m.load_state_dict(ckpt["model"], strict=False)
+            assert not unexpected and all(k.startswith("dmg.") for k in missing), \
+                (missing, unexpected)
+        else:  # v1-obs checkpoint: expand (function-preserving)
+            from model import load_expanded
+            load_expanded(m, ckpt["model"])
+        return m
+
+    def add_member(self, name, model):
+        """Add a frozen member; at cap, evict the most-mastered snapshot."""
+        model.eval()
+        for p in model.parameters():
+            p.requires_grad_(False)
+        if self.fcache is None:
+            n_block = int(self.block.sum())
+            self.fcache = model.new_cache(
+                n_block, self.device,
+                torch.bfloat16 if self.amp else torch.float32)
+        if len(self.members) >= self.cap:
+            snaps = [k for k, n in enumerate(self.members) if n.startswith("snap")]
+            if not snaps:  # cap misconfigured below initial member count
+                return
+            k = max(snaps, key=lambda j: self.wr_m[j])
+            print(f"league: evict {self.members[k]} (wr {self.wr_m[k]:.2f}) "
+                  f"for {name}", flush=True)
+            self.members[k], self.mmodels[k] = name, model
+            self.wr_m[k] = 0.5
+            stale = np.flatnonzero(self.block & (self.midx == k))
+            if len(stale):  # mid-episode envs: fresh cache for the new weights
+                self.fcache.reset(torch.from_numpy(stale - self.block_base).to(self.device))
+        else:
+            self.members.append(name)
+            self.mmodels.append(model)
+            self.wr_m = np.append(self.wr_m, 0.5)
+
+    def add_snapshot(self, model, it):
+        import copy
+        self.add_member(f"snap{it:05d}", copy.deepcopy(model))
+
+    def _pfsp_draw(self):
+        h = (1.0 - self.wr_m) ** 2
+        p = 0.5 / len(self.members) + 0.5 * h / max(h.sum(), 1e-9)
+        return int(np.random.choice(len(self.members), p=p / p.sum()))
 
     def resample(self, i):
         if self.block[i]:
             self.opp[i] = 100  # frozen block marker
+            self.midx[i] = self._pfsp_draw()
             self.hot[i] = False
             return
         if np.random.random() < self.self_share:
@@ -146,7 +192,8 @@ class Opponents:
     def record(self, i, learner_reward):
         win = float(learner_reward > 0)
         if self.block[i]:
-            self.wr_frozen += 0.005 * (win - self.wr_frozen)
+            k = self.midx[i]
+            self.wr_m[k] += 0.005 * (win - self.wr_m[k])
         elif self.opp[i] >= 0:
             k = self.opp[i]
             self.wr[k] += 0.005 * (win - self.wr[k])
@@ -159,22 +206,23 @@ class Opponents:
             for i in np.flatnonzero(need1 & (self.opp == k) & ~self.block):
                 env.actions[i, 1] = pol.act(env.m_ints[i, 1], env.m_floats[i, 1],
                                             env.masks[i, 1])
-        if self.frozen is not None:
-            rows = np.flatnonzero(need1 & self.block)
-            if len(rows):
-                bidx = torch.from_numpy(rows - self.block_base).to(self.device)
-                with torch.no_grad(), \
-                     (torch.autocast("cuda", torch.bfloat16) if self.amp else nullcontext()):
-                    h = self.frozen.step(
-                        torch.from_numpy(env.m_ints[rows, 1]).to(self.device),
-                        torch.from_numpy(env.m_floats[rows, 1]).to(self.device),
-                        self.fcache, bidx)
-                    dist = masked_dist(self.frozen.pi(h),
-                                       torch.from_numpy(env.masks[rows, 1]).to(self.device))
-                env.actions[rows, 1] = dist.sample().cpu().numpy()
+        for k, m in enumerate(self.mmodels):
+            rows = np.flatnonzero(need1 & self.block & (self.midx == k))
+            if not len(rows):
+                continue
+            bidx = torch.from_numpy(rows - self.block_base).to(self.device)
+            with torch.no_grad(), \
+                 (torch.autocast("cuda", torch.bfloat16) if self.amp else nullcontext()):
+                h = m.step(
+                    torch.from_numpy(env.m_ints[rows, 1]).to(self.device),
+                    torch.from_numpy(env.m_floats[rows, 1]).to(self.device),
+                    self.fcache, bidx)
+                dist = masked_dist(m.pi(h),
+                                   torch.from_numpy(env.masks[rows, 1]).to(self.device))
+            env.actions[rows, 1] = dist.sample().cpu().numpy()
 
     def on_done(self, done):
-        if self.frozen is not None:
+        if self.fcache is not None:
             b = done[self.block[done]]
             if len(b):
                 self.fcache.reset(torch.from_numpy(b - self.block_base).to(self.device))
@@ -188,8 +236,10 @@ class Opponents:
         m = {f"league/wr_{name}": self.wr[k] for k, (name, _) in enumerate(self.pool)}
         m["league/mirror_frac"] = float((self.opp == -1).mean())
         m["league/hot_frac"] = float(self.hot.mean())
-        if self.frozen is not None:
-            m["league/wr_frozen"] = self.wr_frozen
+        for k, name in enumerate(self.members):
+            m[f"league/wr_{name}"] = self.wr_m[k]
+        if len(self.members):
+            m["league/wr_frozen"] = float(self.wr_m.mean())
         return m
 
 
@@ -260,8 +310,12 @@ def main():
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--draw-penalty", type=float, default=0.3)
     ap.add_argument("--self-share", type=float, default=0.7)
-    ap.add_argument("--league", default=None, help="frozen checkpoint opponent")
+    ap.add_argument("--league", default=None,
+                    help="frozen checkpoint opponent(s), comma-separated")
     ap.add_argument("--league-share", type=float, default=0.1)
+    ap.add_argument("--league-cap", type=int, default=8)
+    ap.add_argument("--snapshot-every", type=int, default=0,
+                    help="add a frozen self-snapshot to the league every N iters")
     ap.add_argument("--anchor-kl", type=float, default=0.02)
     ap.add_argument("--anchor-every", type=int, default=150)
     ap.add_argument("--dmg", type=float, default=1.0, help="damage-prediction aux weight")
@@ -506,6 +560,8 @@ def main():
 
         if anchor is not None and it % args.anchor_every == 0:
             anchor.load_state_dict(model.state_dict())  # move the magnet
+        if args.snapshot_every and it % args.snapshot_every == 0:
+            opps.add_snapshot(model, it)
 
         agg = {k: float(v) for k, v in agg.items()}  # single host sync
         nb = max(nb, 1)
@@ -529,7 +585,7 @@ def main():
                f"train {metrics['train_s']:.1f}s eps {len(eps)} "
                f"pg {metrics['loss/pg']:.4f} vf {metrics['loss/vf']:.4f} "
                f"ent {metrics['loss/entropy']:.3f} spacc {metrics['belief/sp_acc_unrevealed']:.3f}"
-               + (f" wrF {opps.wr_frozen:.3f}" if opps.frozen is not None else ""))
+               + (f" wrF {float(opps.wr_m.mean()):.3f}" if len(opps.members) else ""))
         if it % args.eval_every == 0 or it == args.iters:
             model.eval()
             wr, _ = evaluate(model, device, amp, RandomPolicy(1))
