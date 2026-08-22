@@ -39,7 +39,17 @@ const Choice = pkmn.Choice;
 const Player = pkmn.Player;
 const Result = pkmn.Result;
 
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
+
+/// Ladder-visible status byte: the engine's sleep countdown (low 3 bits) is
+/// server-side hidden RNG, so any sleep is canonicalized to a fixed "asleep,
+/// duration unknown" value (4). Turns-elapsed is countable from sequence
+/// memory. TOX stays raw (public). Deployment bot writes the same values.
+fn pubStatus(num: u8) u8 {
+    if (num == gen1.Status.TOX) return num;
+    if (gen1.Status.duration(num) > 0) return 4;
+    return num;
+}
 pub const N_ACTIONS: u32 = 10;
 pub const INTS_PER_PLAYER: u32 = 80;
 // obs v3: 12 mons x 13 floats [hp, level, active, revealed, pp1-4, maxhp/1000,
@@ -524,7 +534,7 @@ pub const Env = struct {
                 const mon = &side.pokemon[id - 1];
                 const is_active = slot == 1;
                 ints[ii] = @intFromEnum(mon.species);
-                ints[ii + 1] = mon.status;
+                ints[ii + 1] = pubStatus(mon.status);
                 const moves = if (is_active) &side.active.moves else &mon.moves;
                 for (0..4) |k| ints[ii + 2 + k] = @intFromEnum(moves[k].id);
                 ii += 6;
@@ -562,7 +572,7 @@ pub const Env = struct {
             ints[ii + 1] = @intFromEnum(side.last_selected_move);
             ints[ii + 2] = @intFromEnum(side.last_used_move);
             ii += 3;
-            floats[fi] = @as(f32, @floatFromInt(gen1.Status.duration(side.stored().status))) / 7.0;
+            floats[fi] = 0.0; // was sleep countdown: hidden RNG, not ladder-visible
             fi += 1;
             inline for (.{ "atk", "def", "spe", "spc" }) |st| {
                 floats[fi] = @as(f32, @floatFromInt(@field(side.active.stats, st))) / 1000.0;

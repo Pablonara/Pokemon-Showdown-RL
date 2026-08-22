@@ -38,7 +38,7 @@ const FORMAT = args.format ?? 'gen1randombattle';
 let searches = +(args.search ?? 0);
 
 // --- battle state tracking ----------------------------------------------------
-const STATUS_BITS = {psn: 1 << 3, brn: 1 << 4, frz: 1 << 5, par: 1 << 6, tox: 0x88, slp: 2};
+const STATUS_BITS = {psn: 1 << 3, brn: 1 << 4, frz: 1 << 5, par: 1 << 6, tox: 0x88, slp: 4};
 const VOLS = ['bide', 'lockedmove', null, 'flinch', 'twoturnmove', 'partialtrappinglock',
   null, 'confusion', 'mist', 'focusenergy', 'substitute', 'mustrecharge', 'rage',
   'leechseed', 'residualdmg', 'lightscreen', 'reflect', 'transform'];
