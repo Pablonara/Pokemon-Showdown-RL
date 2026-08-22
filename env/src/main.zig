@@ -351,6 +351,20 @@ pub const Env = struct {
                     const side: u8 = if ((b[i] >> 3) == 0) 0 else 1;
                     s.events[side][0] = true;
                     s.last_move_side = side;
+                    // usage counts EXECUTED moves only (= what the ladder
+                    // shows). Selection-time counting leaked blocked moves
+                    // (asleep/full-para) into the reveal gate. Moves called
+                    // by Metronome/Mirror Move match no slot and are skipped.
+                    const sd = s.battle.side(@enumFromInt(side));
+                    const id = sd.order[0];
+                    if (id != 0 and b[i + 1] != 0) {
+                        for (0..4) |k| {
+                            if (@intFromEnum(sd.active.moves[k].id) == b[i + 1]) {
+                                s.usage[side][id - 1][k] +|= 1;
+                                break;
+                            }
+                        }
+                    }
                     i += if (b[i + 3] == 1) 5 else 4;
                 },
                 4 => i += 8, // Switch
@@ -435,10 +449,6 @@ pub const Env = struct {
                         .{ action, i, p, s.battle_idx },
                     );
                     choice[p] = c;
-                    if (c.type == .Move and c.data > 0) {
-                        const id = s.battle.side(player).order[0];
-                        s.usage[p][id - 1][c.data - 1] +|= 1;
-                    }
                 }
             }
             s.result = env.update2(s, choice[0], choice[1]);
@@ -556,7 +566,9 @@ pub const Env = struct {
 
         for (sides) |side| {
             const active = &side.active;
-            ints[ii] = @bitCast(@as(u32, @truncate(@as(u64, @bitCast(active.volatiles)))));
+            // flags only (bits 0-17): higher bits hold hidden counters
+            // (confusion/binding turns = server RNG, bide accumulator)
+            ints[ii] = @bitCast(@as(u32, @truncate(@as(u64, @bitCast(active.volatiles)))) & 0x3FFFF);
             ii += 1;
             inline for (.{ "atk", "def", "spe", "spc", "accuracy", "evasion" }) |b| {
                 floats[fi] = @as(f32, @floatFromInt(@field(active.boosts, b))) / 6.0;
