@@ -38,7 +38,19 @@ FIELDS = [  # slab name, per-row shape, dtype
     ("mi", (80,), np.int32), ("mf", (224,), np.float32),
     ("sp", (6,), np.int16), ("mv", (24,), np.int16), ("rev", (6,), np.uint8),
     ("mask", (N_ACTIONS,), np.uint8), ("act", (), np.int64), ("logp", (), np.float32),
+    ("phi", (), np.float32),  # PBRS potential (material differential)
 ]
+
+
+def material_phi(mf):
+    """Potential = mean own hp - mean opp hp + 0.5*(alive diff)/6, in [-1.5,1.5].
+    Unrevealed opp mons read 1.0 hp (full) - reveals cause small phantom dips;
+    PBRS stays policy-invariant for ANY potential, so this only adds a little
+    variance where reveals happen."""
+    own = mf[:, [j * 13 for j in range(6)]]
+    opp = mf[:, [78 + j * 13 for j in range(6)]]
+    return (own.mean(1) - opp.mean(1)
+            + 0.5 * ((own > 0).sum(1) - (opp > 0).sum(1)) / 6.0)
 
 
 def masked_dist(logits, mask):
@@ -254,9 +266,11 @@ class Opponents:
         return m
 
 
-def gae_batch(vals, rets, lens, gamma, lam):
-    """Vectorized terminal-reward GAE. vals (B,T) padded, rets (B,), lens (B,).
-    Returns adv (B,T) with zeros beyond each episode's length."""
+def gae_batch(vals, rets, lens, gamma, lam, phi=None, pbrs=0.0):
+    """Vectorized GAE. vals (B,T) padded, rets (B,), lens (B,). Rewards are
+    terminal +-1 plus (optional) PBRS shaping r_t = gamma*phi_{t+1} - phi_t
+    with phi(terminal)=0 (policy-invariant; densifies credit for material
+    swings). Returns adv (B,T) with zeros beyond each episode's length."""
     B, T = vals.shape
     valid = np.arange(T)[None, :] < lens[:, None]
     last_t = lens - 1
@@ -265,6 +279,12 @@ def gae_batch(vals, rets, lens, gamma, lam):
     v_next[np.arange(B), last_t] = 0.0  # terminal
     r = np.zeros_like(vals)
     r[np.arange(B), last_t] = rets
+    if pbrs > 0 and phi is not None:
+        p = phi * pbrs * valid
+        shaped = np.zeros_like(vals)
+        shaped[:, :-1] = gamma * p[:, 1:] - p[:, :-1]  # phi_{T}=0 via valid
+        shaped[np.arange(B), last_t] = -p[np.arange(B), last_t]
+        r += shaped * valid
     delta = (r + gamma * v_next - vals) * valid
     adv = np.zeros_like(vals)
     last = np.zeros(B, dtype=vals.dtype)
@@ -320,6 +340,9 @@ def main():
     ap.add_argument("--gamma", type=float, default=0.999)
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--draw-penalty", type=float, default=0.3)
+    ap.add_argument("--pbrs", type=float, default=0.0,
+                    help="potential-based shaping coef on material differential "
+                         "(policy-invariant; densifies credit for tempo/hp swings)")
     ap.add_argument("--self-share", type=float, default=0.7,
                     help="DEPRECATED (ignored): non-pool envs are all mirror")
     ap.add_argument("--league", default=None,
@@ -438,6 +461,7 @@ def main():
                 slab.a["mask"][sl] = mk
                 slab.a["act"][sl] = acts
                 slab.a["logp"][sl] = logp
+                slab.a["phi"][sl] = material_phi(mf)
                 for j, r in enumerate(rows):
                     stream_rows[r].append(slab.ptr + j)
                 slab.ptr += k
@@ -495,7 +519,8 @@ def main():
                 v_np = val.cpu().numpy()
                 lens_np = lens.cpu().numpy()
                 rets_np = ret.cpu().numpy().astype(np.float32)
-                adv = gae_batch(v_np, rets_np, lens_np, args.gamma, args.lam)
+                adv = gae_batch(v_np, rets_np, lens_np, args.gamma, args.lam,
+                                phi=t["phi"].cpu().numpy(), pbrs=args.pbrs)
                 t["adv"] = torch.from_numpy(adv).to(device)
                 t["vtarget"] = (t["adv"] + val) * valid
                 adv_sum += float(adv.sum())
