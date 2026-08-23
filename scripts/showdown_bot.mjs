@@ -65,6 +65,7 @@ class Battle {
     this.opp = []; // [{num, level, hp, status, moves:Map(num->uses), active}]
     this.myUsage = new Map(); // speciesNum -> Map(moveNum -> uses)
     this.ppCache = new Map(); // speciesNum -> [pp1..4]/63 (last seen active)
+    this.disabled = {p1: 0, p2: 0}; // active's disabled move num (0 = none)
     this.boosts = {p1: {}, p2: {}};
     this.vols = {p1: {}, p2: {}};
     this.lastUsed = {p1: 0, p2: 0};
@@ -86,6 +87,7 @@ class Battle {
         this.turn = +rest[0];
         break;
       case 'switch': case 'drag': {
+        this.disabled[side] = 0; // gen1: Disable ends on switch-out
         if (mine) {
           this.vols[this.my] = {};
           this.boosts[this.my] = {};
@@ -157,6 +159,9 @@ class Battle {
         break;
       case '-start': case '-activate': {
         const eff = norm((rest[1] ?? '').replace(/^move: /, ''));
+        if (eff === 'disable' && rest[2]) {
+          this.disabled[side] = MOVES.get(norm(rest[2])) ?? 0;
+        }
         const key = VOLMAP[eff] ?? (eff === 'wrap' || eff === 'bind' || eff === 'firespin'
           || eff === 'clamp' ? 'partialtrappinglock' : null);
         if (key) this.vols[side][key] = true;
@@ -164,6 +169,7 @@ class Battle {
       }
       case '-end': {
         const eff = norm((rest[1] ?? '').replace(/^move: /, ''));
+        if (eff === 'disable') this.disabled[side] = 0;
         if (VOLMAP[eff]) delete this.vols[side][VOLMAP[eff]];
         break;
       }
@@ -270,6 +276,10 @@ class Battle {
       floats[215 + e] = this.events[this.my][e];
       floats[218 + e] = this.events[other][e];
     }
+    // Disable state (public): own flag, opp flag, opp disabled move id
+    floats[221] = this.disabled[this.my] ? 1 : 0;
+    floats[222] = this.disabled[other] ? 1 : 0;
+    floats[223] = this.disabled[other] / 166;
     this.events = {p1: [0, 0, 0], p2: [0, 0, 0]}; // consumed by this decision
 
     // legal actions (mirrors env action space)

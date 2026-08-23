@@ -46,6 +46,10 @@ for (const m of dex.moves.all()) {
     power: m.basePower,
     status: m.category === 'Status',
     accuracy: m.accuracy === true ? 100 : m.accuracy,
+    pp: m.pp,
+    priority: m.priority ?? 0,
+    sec: m.secondary?.chance ?? 0,
+    highcrit: (m.critRatio ?? 1) > 1,
   };
 }
 

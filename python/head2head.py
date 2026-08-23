@@ -17,7 +17,7 @@ import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from gen1env import Gen1Env  # noqa: E402
-from model import Model, load_expanded  # noqa: E402
+from model import Model, smart_load  # noqa: E402
 from train_fast import masked_dist  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -29,11 +29,7 @@ def load(path, device):
     cfg = ckpt.get("config", {})
     m = Model(cfg.get("d", 384), cfg.get("e_layers", 3), cfg.get("t_layers", 6),
               cfg.get("heads", 6), dex_feats=cfg.get("dex_feats", True)).to(device)
-    if ckpt["model"]["mon_in.weight"].shape == m.mon_in.weight.shape:
-        missing, unexpected = m.load_state_dict(ckpt["model"], strict=False)
-        assert not unexpected and all(k.startswith("dmg.") for k in missing)
-    else:  # v1-obs checkpoint: expand (function-preserving)
-        load_expanded(m, ckpt["model"])
+    smart_load(m, ckpt["model"])  # any vintage, function-preserving
     return m.eval()
 
 

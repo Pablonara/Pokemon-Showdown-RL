@@ -39,7 +39,7 @@ const Choice = pkmn.Choice;
 const Player = pkmn.Player;
 const Result = pkmn.Result;
 
-pub const VERSION: u32 = 5;
+pub const VERSION: u32 = 6;
 
 /// Opponent hp as the ladder shows it: integer percent, min 1 while alive
 /// (same integer math as PS getHealth).
@@ -654,6 +654,20 @@ pub const Env = struct {
         }
         floats[fi] = @as(f32, @floatFromInt(s.battle.turn)) / 500.0;
         fi += 1;
+        // Disable state (ladder-public via |-start|Disable + named move):
+        // [221] own active has a disabled move, [222] opp does,
+        // [223] opp disabled move id /166 (own slot is implied by the mask)
+        {
+            const own = s.battle.side(player);
+            const foe = s.battle.foe(player);
+            floats[221] = @floatFromInt(@intFromBool(own.active.volatiles.disable_duration > 0));
+            const fd = foe.active.volatiles.disable_duration > 0;
+            floats[222] = @floatFromInt(@intFromBool(fd));
+            floats[223] = if (fd)
+                @as(f32, @floatFromInt(@intFromEnum(foe.active.moves[foe.active.volatiles.disable_move - 1].id))) / 166.0
+            else
+                0.0;
+        }
         for (pidx) |sp| { // event flags: [attempted, missed, crit] mine then theirs
             for (0..3) |e| {
                 floats[fi] = @floatFromInt(@intFromBool(s.events[sp][e]));

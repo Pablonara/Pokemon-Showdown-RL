@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from model import OBS_FLOATS, Model, load_expanded  # noqa: E402
+from model import OBS_FLOATS, Model, smart_load  # noqa: E402
 from train_fast import masked_dist  # noqa: E402
 
 
@@ -53,12 +53,7 @@ def main():
     cfg = ckpt.get("config", {})
     model = Model(cfg.get("d", 384), cfg.get("e_layers", 3), cfg.get("t_layers", 6),
                   cfg.get("heads", 6), dex_feats=cfg.get("dex_feats", True)).to(device)
-    if ckpt["model"]["mon_in.weight"].shape == model.mon_in.weight.shape:
-        missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
-        assert not unexpected and all(k.startswith("dmg.") for k in missing)
-    else:  # v1-obs checkpoint: expand (function-preserving)
-        load_expanded(model, ckpt["model"])
-        print("note: v1 checkpoint expanded to obs v3", flush=True)
+    smart_load(model, ckpt["model"])  # any vintage, function-preserving
     model.eval()
     cache = model.new_cache(MAX_BATTLES, device)
     slots = {}  # battle id -> cache slot

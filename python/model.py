@@ -32,13 +32,19 @@ def _dex_tables():
     the type chart, move powers, or base stats from win/loss rewards."""
     data = json.loads((pathlib.Path(__file__).parent.parent / "data" / "gen1.json").read_text())
     n_types = len(data["types"])
-    move_feat = torch.zeros(166, 3 + n_types)  # [power/100, acc/100, status, type 1-hot]
+    # [power/100, acc/100, status, pp/64, priority, sec_chance/100, highcrit,
+    #  type 1-hot] - power must stay col 0 (effectiveness lookup uses it)
+    move_feat = torch.zeros(166, 7 + n_types)
     for num, m in data["moves"].items():
         i = int(num)
         move_feat[i, 0] = (m["power"] or 0) / 100.0
         move_feat[i, 1] = (m["accuracy"] or 100) / 100.0
         move_feat[i, 2] = 1.0 if m["status"] else 0.0
-        move_feat[i, 3 + m["type"]] = 1.0
+        move_feat[i, 3] = m.get("pp", 0) / 64.0
+        move_feat[i, 4] = m.get("priority", 0)
+        move_feat[i, 5] = m.get("sec", 0) / 100.0
+        move_feat[i, 6] = 1.0 if m.get("highcrit") else 0.0
+        move_feat[i, 7 + m["type"]] = 1.0
     species_feat = torch.zeros(152, 5 + n_types)  # [base stats/150, type multi-hot]
     move_type = torch.zeros(166, dtype=torch.long)
     sp_t1 = torch.zeros(152, dtype=torch.long)
@@ -222,27 +228,77 @@ class Model(nn.Module):
 
 
 def load_expanded(model, old_sd):
-    """Load a v1-obs (160f, MON_FLOATS=8) checkpoint into a v3-obs (224f,
-    MON_FLOATS=13) model. New feature columns are zero-initialized, so the
-    expanded model is function-identical to the old one until training uses
-    the new inputs. Column maps follow the layout diffs:
+    """Load a v1-obs (160f, MON_FLOATS=8) checkpoint into the current model.
+    Chains: v1 -> v3-shaped intermediate -> feat-expanded (see
+    load_expanded_feats). All new columns zero-init = function-preserving.
       mon floats: v1 [hp,lvl,act,rev,pp4] -> v3 same 8 + [maxhp, used4] new
       globals:    v1 extras cols 0..58 identical (incl turn), 59.. was pad;
                   v3 adds event flags at 59..65; eff features move 64:68->68:72
     """
-    sd = model.state_dict()
-    loaded = set()
+    v3 = {}
     for k, v in old_sd.items():
+        if k in _DEX_BUFFERS:
+            continue
         if k == "mon_in.weight":
-            w = torch.zeros_like(sd[k])
             pre = v.shape[1] - 8  # embeddings/dex-feat columns, unchanged
+            w = torch.zeros(v.shape[0], pre + 13, dtype=v.dtype)
             w[:, :pre] = v[:, :pre]
             w[:, pre:pre + 8] = v[:, pre:]
-            sd[k] = w
+            v3[k] = w
         elif k == "global_in.weight":
-            w = torch.zeros_like(sd[k])
+            w = torch.zeros(v.shape[0], 72, dtype=v.dtype)
             w[:, :59] = v[:, :59]
             w[:, 68:72] = v[:, 64:68]
+            v3[k] = w
+        else:
+            v3[k] = v
+    return load_expanded_feats(model, v3)
+
+
+_DEX_BUFFERS = {"MOVE_FEAT", "SPECIES_FEAT", "MOVE_TYPE", "SP_T1", "SP_T2",
+                "SP_MONO", "CHART"}
+
+
+def smart_load(model, sd):
+    """Load any checkpoint vintage into the current model, function-
+    preserving: v6-native = direct; v3/v5-era (mon_in 4 narrower) = move-feat
+    expansion; v1-era = full chain. Dex buffers always come from the model."""
+    w, cur = sd["mon_in.weight"].shape[1], model.mon_in.weight.shape[1]
+    if w == cur:
+        missing, unexpected = model.load_state_dict(
+            {k: v for k, v in sd.items() if k not in _DEX_BUFFERS}, strict=False)
+        assert not unexpected, unexpected
+        assert all(k.startswith("dmg.") or k in _DEX_BUFFERS for k in missing), missing
+        return model
+    if w == cur - 4:
+        return load_expanded_feats(model, sd)
+    return load_expanded(model, sd)
+# mon_in column layout: sp(48+20) + mv_emb(48) + [pow,acc,status]=3 -> 119,
+# then the 4 new move-feat cols, then type 1-hot(15) + status-emb(16) + mf(13)
+_FEAT_INS = 119
+
+
+def load_expanded_feats(model, old_sd):
+    """Load a v3/v5-era checkpoint (18-col MOVE_FEAT, mon_in 163) into the
+    v6 model (22-col MOVE_FEAT, mon_in 167). New move-feat columns enter via
+    zero-init weights; global_in cols 65:68 (previously always-zero inputs
+    with untrained random weights - the Disable flags now live there) are
+    zeroed. Function-preserving by construction. Dex buffers are skipped:
+    the model's own regenerated tables are authoritative."""
+    sd = model.state_dict()
+    loaded = set(_DEX_BUFFERS)  # authoritative from the model
+    for k, v in old_sd.items():
+        if k in _DEX_BUFFERS:
+            continue
+        if k == "mon_in.weight" and v.shape[1] != sd[k].shape[1]:
+            assert sd[k].shape[1] - v.shape[1] == 4, (v.shape, sd[k].shape)
+            w = torch.zeros_like(sd[k])
+            w[:, :_FEAT_INS] = v[:, :_FEAT_INS]
+            w[:, _FEAT_INS + 4:] = v[:, _FEAT_INS:]
+            sd[k] = w
+        elif k == "global_in.weight":
+            w = v.clone()
+            w[:, 65:68] = 0  # untrained-random weights on newly-live inputs
             sd[k] = w
         elif k in sd and sd[k].shape == v.shape:
             sd[k] = v

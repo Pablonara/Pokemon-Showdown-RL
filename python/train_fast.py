@@ -136,14 +136,8 @@ class Opponents:
         m = Model(cfg.get("d", 384), cfg.get("e_layers", 3),
                   cfg.get("t_layers", 6), cfg.get("heads", 6),
                   dex_feats=cfg.get("dex_feats", False)).to(self.device)
-        if ckpt["model"]["mon_in.weight"].shape == m.mon_in.weight.shape:
-            # older checkpoints predate the dmg aux head (unused when acting)
-            missing, unexpected = m.load_state_dict(ckpt["model"], strict=False)
-            assert not unexpected and all(k.startswith("dmg.") for k in missing), \
-                (missing, unexpected)
-        else:  # v1-obs checkpoint: expand (function-preserving)
-            from model import load_expanded
-            load_expanded(m, ckpt["model"])
+        from model import smart_load
+        smart_load(m, ckpt["model"])  # any vintage, function-preserving
         return m
 
     def add_member(self, name, model, policy=None):
@@ -366,15 +360,12 @@ def main():
 
     model = Model(args.d, args.e_layers, args.t_layers, args.heads,
                   dex_feats=args.dex_feats).to(device)
-    if args.init:
-        ckpt = torch.load(args.init, map_location=device, weights_only=True)
-        model.load_state_dict(ckpt["model"])
-        print(f"initialized from {args.init}", flush=True)
-    elif args.init_expand:
-        from model import load_expanded
-        ckpt = torch.load(args.init_expand, map_location=device, weights_only=True)
-        load_expanded(model, ckpt["model"])
-        print(f"initialized from {args.init_expand} (expanded to obs v3)", flush=True)
+    if args.init or args.init_expand:
+        from model import smart_load
+        path = args.init or args.init_expand
+        ckpt = torch.load(path, map_location=device, weights_only=True)
+        smart_load(model, ckpt["model"])  # any vintage, function-preserving
+        print(f"initialized from {path} (smart_load)", flush=True)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"device={device} params={n_params / 1e6:.2f}M envs={args.envs} amp={amp}", flush=True)
@@ -617,8 +608,8 @@ def main():
                             "eval/vs_maxdamage_greedy": wg,
                             "eval/draws_maxdamage": dm, "eval/draws_maxdamage_greedy": dg})
             msg += f" | vs_random {wr:.3f} vs_maxdmg {wm:.3f} greedy {wg:.3f}"
-            torch.save({"model": model.state_dict(), "iter": it, "config": vars(args)},
-                       out / f"ckpt_{it:05d}.pt")
+            torch.save({"model": model.state_dict(), "iter": it, "obs": 6,
+                        "config": vars(args)}, out / f"ckpt_{it:05d}.pt")
         if wb:
             wb.log(metrics, step=it)
         print(msg, flush=True)
