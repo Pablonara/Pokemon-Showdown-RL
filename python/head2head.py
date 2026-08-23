@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from eval_v0 import MaxDamagePolicy  # noqa: E402
 from gen1env import Gen1Env  # noqa: E402
 from model import Model, smart_load  # noqa: E402
 from train_fast import masked_dist  # noqa: E402
@@ -25,6 +26,8 @@ POOL = str(ROOT / "teams" / "gen1-pool.bin")
 
 
 def load(path, device):
+    if path == "maxdmg":
+        return MaxDamagePolicy()
     ckpt = torch.load(path, map_location=device, weights_only=True)
     cfg = ckpt.get("config", {})
     m = Model(cfg.get("d", 384), cfg.get("e_layers", 3), cfg.get("t_layers", 6),
@@ -39,7 +42,8 @@ class Stats:
     def __init__(self):
         self.ep = {}
         self.agg = {k: {"n": 0, "turns": [], "am": Counter(), "bm": Counter(),
-                        "asw": 0, "amv": 0} for k in ("win", "loss", "draw")}
+                        "asw": 0, "amv": 0, "crit_in": 0, "miss": 0, "froz": 0,
+                        "crit_eps": 0} for k in ("win", "loss", "draw")}
 
     def _mid(self, env, i, p, slot):
         mf = env.m_floats[i, p]
@@ -49,8 +53,16 @@ class Stats:
     def record(self, env, p, a_player, rows, acts):
         for i, a in zip(rows, acts):
             e = self.ep.setdefault(int(i), {"am": Counter(), "bm": Counter(),
-                                            "asw": 0, "amv": 0, "turn": 0.0})
+                                            "asw": 0, "amv": 0, "turn": 0.0,
+                                            "crit_in": 0, "miss": 0, "froz": False})
             e["turn"] = float(env.m_floats[i, p, 214]) * 500  # env resets on done
+            if p == a_player:
+                fl = env.m_floats[i, p]
+                e["crit_in"] += int(fl[220])   # their crit landed on me
+                e["miss"] += int(fl[216])      # my move missed
+                st = env.m_ints[i, p, [j * 6 + 1 for j in range(6)]]
+                if (st & 32).any():            # any of my mons frozen
+                    e["froz"] = True
             if p == a_player:
                 if a < 4:
                     e["am"][self._mid(env, i, p, int(a))] += 1
@@ -73,6 +85,10 @@ class Stats:
         g["bm"].update(e["bm"])
         g["asw"] += e["asw"]
         g["amv"] += e["amv"]
+        g["crit_in"] += e["crit_in"]
+        g["crit_eps"] += int(e["crit_in"] > 0)
+        g["miss"] += e["miss"]
+        g["froz"] += int(e["froz"])
 
     def report(self, names):
         def top(c, n=6):
@@ -86,8 +102,12 @@ class Stats:
                 continue
             t = np.array(g["turns"])
             sw = g["asw"] / max(1, g["asw"] + g["amv"])
-            print(f"A-{k}: n={g['n']} turns p50/p90 {np.median(t):.0f}/"
-                  f"{np.percentile(t, 90):.0f} switch-rate {sw:.2f}\n"
+            n = g["n"]
+            print(f"A-{k}: n={n} turns p50/p90 {np.median(t):.0f}/"
+                  f"{np.percentile(t, 90):.0f} switch-rate {sw:.2f} | "
+                  f"crits-taken/ep {g['crit_in'] / n:.2f} "
+                  f"(any: {100 * g['crit_eps'] / n:.0f}%) "
+                  f"frozen {100 * g['froz'] / n:.0f}% misses/ep {g['miss'] / n:.2f}\n"
                   f"  A used: {top(g['am'])}\n  B used: {top(g['bm'])}")
 
 
@@ -96,12 +116,20 @@ def play(models, device, episodes, greedy, n_envs=256, seed=42,
          stats=None, a_player=0):
     """models[0] plays P1, models[1] plays P2; returns models[0] wins/draws."""
     env = Gen1Env(POOL, n=n_envs, seed=seed)
-    caches = [m.new_cache(n_envs, device) for m in models]
+    caches = [None if isinstance(m, MaxDamagePolicy) else m.new_cache(n_envs, device)
+              for m in models]
     wins = draws = total = 0
     while total < episodes:
         for p, (m, cache) in enumerate(zip(models, caches)):
             rows = np.flatnonzero(env.needs[:, p])
             if not len(rows):
+                continue
+            if isinstance(m, MaxDamagePolicy):
+                for i in rows:
+                    env.actions[i, p] = m.act(env.m_ints[i, p], env.m_floats[i, p],
+                                              env.masks[i, p])
+                if stats is not None:
+                    stats.record(env, p, a_player, rows, env.actions[rows, p])
                 continue
             idx = torch.from_numpy(rows).to(device)
             h = m.step(torch.from_numpy(env.m_ints[rows, p]).to(device),
@@ -123,7 +151,8 @@ def play(models, device, episodes, greedy, n_envs=256, seed=42,
                     stats.done(env, i, a_player)
             t = torch.from_numpy(done).to(device)
             for cache in caches:
-                cache.reset(t)
+                if cache is not None:
+                    cache.reset(t)
     env.close()
     return wins, draws, total
 
