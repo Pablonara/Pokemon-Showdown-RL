@@ -43,7 +43,7 @@ class Stats:
         self.ep = {}
         self.agg = {k: {"n": 0, "turns": [], "am": Counter(), "bm": Counter(),
                         "asw": 0, "amv": 0, "crit_in": 0, "miss": 0, "froz": 0,
-                        "crit_eps": 0} for k in ("win", "loss", "draw")}
+                        "crit_eps": 0, "churn": 0} for k in ("win", "loss", "draw")}
 
     def _mid(self, env, i, p, slot):
         mf = env.m_floats[i, p]
@@ -54,7 +54,8 @@ class Stats:
         for i, a in zip(rows, acts):
             e = self.ep.setdefault(int(i), {"am": Counter(), "bm": Counter(),
                                             "asw": 0, "amv": 0, "turn": 0.0,
-                                            "crit_in": 0, "miss": 0, "froz": False})
+                                            "crit_in": 0, "miss": 0, "froz": False,
+                                            "churn": 0, "prev_vsw": False})
             e["turn"] = float(env.m_floats[i, p, 214]) * 500  # env resets on done
             if p == a_player:
                 fl = env.m_floats[i, p]
@@ -67,8 +68,13 @@ class Stats:
                 if a < 4:
                     e["am"][self._mid(env, i, p, int(a))] += 1
                     e["amv"] += 1
+                    e["prev_vsw"] = False
                 else:
                     e["asw"] += 1
+                    voluntary = bool(env.masks[i, p, :4].any())  # moves were legal
+                    if voluntary and e["prev_vsw"]:
+                        e["churn"] += 1  # voluntary switch right after one
+                    e["prev_vsw"] = voluntary
             elif a < 4:
                 e["bm"][self._mid(env, i, p, int(a))] += 1
 
@@ -89,6 +95,7 @@ class Stats:
         g["crit_eps"] += int(e["crit_in"] > 0)
         g["miss"] += e["miss"]
         g["froz"] += int(e["froz"])
+        g["churn"] += e["churn"]
 
     def report(self, names):
         def top(c, n=6):
@@ -107,7 +114,8 @@ class Stats:
                   f"{np.percentile(t, 90):.0f} switch-rate {sw:.2f} | "
                   f"crits-taken/ep {g['crit_in'] / n:.2f} "
                   f"(any: {100 * g['crit_eps'] / n:.0f}%) "
-                  f"frozen {100 * g['froz'] / n:.0f}% misses/ep {g['miss'] / n:.2f}\n"
+                  f"frozen {100 * g['froz'] / n:.0f}% misses/ep {g['miss'] / n:.2f} "
+                  f"churn/ep {g['churn'] / n:.2f}\n"
                   f"  A used: {top(g['am'])}\n  B used: {top(g['bm'])}")
 
 
