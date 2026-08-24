@@ -594,6 +594,10 @@ def main():
                 loss = (pg + args.vf * vf - args.ent * ent
                         + args.belief * 0.5 * (sp + mv) + args.anchor_kl * akl
                         + args.dmg * dmg)
+                if not torch.isfinite(loss):
+                    print(f"it {it}: non-finite loss, batch skipped", flush=True)
+                    opt.zero_grad(set_to_none=True)
+                    continue
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), 0.5)
