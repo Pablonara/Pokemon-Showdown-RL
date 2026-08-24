@@ -340,6 +340,9 @@ def main():
     ap.add_argument("--gamma", type=float, default=0.999)
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--draw-penalty", type=float, default=0.3)
+    ap.add_argument("--win-speed-bonus", type=float, default=0.0,
+                    help="scale WIN reward by 1 + b*clip((30-T)/30, -.5, .5): "
+                         "fast wins pay up to 1.5b*|r| more; losses/draws untouched")
     ap.add_argument("--pbrs", type=float, default=0.0,
                     help="potential-based shaping coef on material differential "
                          "(policy-invariant; densifies credit for tempo/hp swings)")
@@ -476,6 +479,9 @@ def main():
                             r = float(env.rewards[i, p])
                             if r == 0:
                                 r = -args.draw_penalty  # stalling is not safety
+                            elif r > 0 and args.win_speed_bonus > 0:
+                                pace = (30.0 - float(env.ep_turns[i])) / 30.0
+                                r *= 1.0 + args.win_speed_bonus * max(-0.5, min(0.5, pace))
                             completed.append(finish_episode(s, slab, r))
                     opps.record(i, float(env.rewards[i, 0]))
                 opps.on_done(done)
