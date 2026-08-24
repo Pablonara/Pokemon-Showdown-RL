@@ -745,6 +745,29 @@ export fn g1_debug_stats(env: *Env, i: u32, side: u32, slot: u32, out: *[5]u16) 
     out.* = .{ mon.stats.hp, mon.stats.atk, mon.stats.def, mon.stats.spe, mon.stats.spc };
 }
 
+export fn g1_state_size() u64 {
+    return @sizeOf(EnvState);
+}
+
+/// Snapshot env i's full battle state (engine RNG included: restore+replay
+/// of identical actions is bit-exact). Enables midgame-start curriculum,
+/// scenario drills, and counterfactual rollouts.
+export fn g1_save(env: *Env, i: u32, out: [*]u8) void {
+    const bytes = std.mem.asBytes(&env.states[i]);
+    @memcpy(out[0..bytes.len], bytes);
+}
+
+/// Restore env i from a snapshot; obs/masks/needs are re-derived. The caller
+/// owns model-side stream state (reset the KV cache slot for this env).
+export fn g1_restore(env: *Env, i: u32, in: [*]const u8) void {
+    const bytes = std.mem.asBytes(&env.states[i]);
+    @memcpy(bytes, in[0..bytes.len]);
+    env.dones[i] = 0;
+    env.rewards[i * 2] = 0;
+    env.rewards[i * 2 + 1] = 0;
+    env.expose(i);
+}
+
 export fn g1_destroy(env: *Env) void {
     env.destroy();
 }

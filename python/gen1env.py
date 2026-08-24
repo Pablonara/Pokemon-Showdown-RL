@@ -58,6 +58,11 @@ def _load():
         ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
         ctypes.POINTER(ctypes.c_uint16)]
     lib.g1_destroy.argtypes = [ctypes.c_void_p]
+    lib.g1_state_size.restype = ctypes.c_uint64
+    lib.g1_save.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                            ctypes.POINTER(ctypes.c_uint8)]
+    lib.g1_restore.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                               ctypes.POINTER(ctypes.c_uint8)]
     return lib
 
 
@@ -90,6 +95,23 @@ class Gen1Env:
 
     def step(self):
         self._lib.g1_step(self._h)
+
+    def state_size(self):
+        return int(self._lib.g1_state_size())
+
+    def save(self, i):
+        """Snapshot battle i (engine RNG included; bit-exact on restore)."""
+        buf = np.empty(self.state_size(), np.uint8)
+        self._lib.g1_save(self._h, i, buf.ctypes.data_as(
+            ctypes.POINTER(ctypes.c_uint8)))
+        return buf
+
+    def restore(self, i, buf):
+        """Restore battle i from a snapshot. Caller must reset any model
+        KV-cache stream state for this env."""
+        assert buf.nbytes == self.state_size()
+        self._lib.g1_restore(self._h, i, np.ascontiguousarray(buf).ctypes
+                             .data_as(ctypes.POINTER(ctypes.c_uint8)))
 
     @property
     def episodes(self) -> int:
