@@ -43,7 +43,8 @@ class Stats:
         self.ep = {}
         self.agg = {k: {"n": 0, "turns": [], "am": Counter(), "bm": Counter(),
                         "asw": 0, "amv": 0, "crit_in": 0, "miss": 0, "froz": 0,
-                        "crit_eps": 0, "churn": 0} for k in ("win", "loss", "draw")}
+                        "crit_eps": 0, "churn": 0, "wakes": 0, "wake_waste": 0}
+                    for k in ("win", "loss", "draw")}
 
     def _mid(self, env, i, p, slot):
         mf = env.m_floats[i, p]
@@ -55,7 +56,9 @@ class Stats:
             e = self.ep.setdefault(int(i), {"am": Counter(), "bm": Counter(),
                                             "asw": 0, "amv": 0, "turn": 0.0,
                                             "crit_in": 0, "miss": 0, "froz": False,
-                                            "churn": 0, "prev_vsw": False})
+                                            "churn": 0, "prev_vsw": False,
+                                            "slept_sp": 0, "just_woke": False,
+                                            "wakes": 0, "wake_waste": 0})
             e["turn"] = float(env.m_floats[i, p, 214]) * 500  # env resets on done
             if p == a_player:
                 fl = env.m_floats[i, p]
@@ -64,6 +67,18 @@ class Stats:
                 st = env.m_ints[i, p, [j * 6 + 1 for j in range(6)]]
                 if (st & 32).any():            # any of my mons frozen
                     e["froz"] = True
+                # wake-waste: own active slept, woke, first action = switch
+                mf_ = env.m_floats[i, p]
+                j = int(np.argmax([mf_[b * 13 + 2] for b in range(6)]))
+                sp_now = int(env.m_ints[i, p, j * 6])
+                asleep = (int(env.m_ints[i, p, j * 6 + 1]) & 7) == 4
+                e["just_woke"] = (not asleep and e["slept_sp"] == sp_now
+                                  and sp_now != 0)
+                if e["just_woke"]:
+                    e["wakes"] += 1
+                    if a >= 4 and env.masks[i, p, :4].any():
+                        e["wake_waste"] += 1
+                e["slept_sp"] = sp_now if asleep else 0
             if p == a_player:
                 if a < 4:
                     e["am"][self._mid(env, i, p, int(a))] += 1
@@ -96,6 +111,8 @@ class Stats:
         g["miss"] += e["miss"]
         g["froz"] += int(e["froz"])
         g["churn"] += e["churn"]
+        g["wakes"] += e["wakes"]
+        g["wake_waste"] += e["wake_waste"]
 
     def report(self, names):
         def top(c, n=6):
@@ -115,7 +132,8 @@ class Stats:
                   f"crits-taken/ep {g['crit_in'] / n:.2f} "
                   f"(any: {100 * g['crit_eps'] / n:.0f}%) "
                   f"frozen {100 * g['froz'] / n:.0f}% misses/ep {g['miss'] / n:.2f} "
-                  f"churn/ep {g['churn'] / n:.2f}\n"
+                  f"churn/ep {g['churn'] / n:.2f} "
+                  f"wake-waste {g['wake_waste']}/{g['wakes']}\n"
                   f"  A used: {top(g['am'])}\n  B used: {top(g['bm'])}")
 
 
