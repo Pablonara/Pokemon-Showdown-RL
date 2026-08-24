@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>けもみみ研究所 — ラボモード篇（LAB MODE）</title>
+<title>けもみみ研究所 — ラボモード篇（LAB MODE / SLIDESHOW）</title>
 <script>document.documentElement.classList.add("js","boot");</script>
-<!-- Full-site sample D: xAI-cool dark HUD x kawaii JP. Same toys, cooler skin. -->
+<!-- Full-site sample D v2: xAI-cool dark HUD x kawaii, deck-style slideshow with per-boundary transitions. -->
 <style>
   @import url("https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap");
   :root {
@@ -51,12 +51,11 @@
   .play .tcard .dot { animation: dotIn .3s var(--pop) .95s both, dotGrow .55s var(--rush) 1.62s both; }
   @keyframes dotIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
   @keyframes dotGrow { from { transform: scale(1); } 18% { transform: scale(.72); } to { transform: scale(320); } }
-
   .veil { position: fixed; left: 0; top: -7.5vh; width: 100vw; height: 115vh;
     clip-path: var(--ears); transform: translateY(103%); pointer-events: none; }
-  .veil.a { background: var(--hot);     z-index: 94; }
-  .veil.c { background: #2a2440;        z-index: 93; }
-  .veil.b { background: var(--void);    z-index: 92; }
+  .veil.a { background: var(--hot);  z-index: 94; }
+  .veil.c { background: #2a2440;     z-index: 93; }
+  .veil.b { background: var(--void); z-index: 92; }
   .play .veil.a { animation: earDrop .95s var(--snap) 2.22s both; }
   .play .veil.c { animation: earDrop .95s var(--snap) 2.36s both; }
   .play .veil.b { animation: earDrop .95s var(--snap) 2.50s both; }
@@ -78,7 +77,7 @@
   nav .vtag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .24em; color: var(--dim);
     border: 1px solid var(--line); border-radius: 3px; padding: 3px 8px; }
   nav .links { margin-left: auto; display: flex; gap: 18px; font-size: 12.5px; }
-  nav .links a { color: var(--txt); text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; opacity: .85; }
+  nav .links a { color: var(--txt); text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; opacity: .85; cursor: pointer; }
   nav .links a:hover { opacity: 1; }
   nav .links a:nth-child(1):hover { border-color: var(--sky); }
   nav .links a:nth-child(2):hover { border-color: var(--violet); }
@@ -87,17 +86,18 @@
   nav .links a:nth-child(5):hover { border-color: var(--hot); }
   @media (max-width: 680px) { nav .links, nav .vtag { display: none; } }
 
-  /* ================= SNAP SCROLLER + HUD GRID ================= */
-  .pages { position: fixed; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth;
-    background-color: var(--void);
+  /* ================= DECK STAGE ================= */
+  .pages { position: fixed; inset: 0; overflow: hidden;
+    background-color: var(--void); transition: background-color .9s var(--snap);
     background-image:
       linear-gradient(rgba(242,243,248,.033) 1px, transparent 1px),
       linear-gradient(90deg, rgba(242,243,248,.033) 1px, transparent 1px);
     background-size: 56px 56px; }
-  html.boot .pages { overflow: hidden; }
-  .page { position: relative; height: 100vh; height: 100dvh; scroll-snap-align: start;
-    display: grid; place-content: center; padding: 80px clamp(18px, 5vw, 48px) 40px;
-    background: transparent; overflow: hidden; }
+  .page { position: absolute; inset: 0; display: grid; place-content: center;
+    padding: 80px clamp(18px, 5vw, 48px) 40px; overflow: hidden;
+    opacity: 0; pointer-events: none; z-index: 1; }
+  .page.cur { opacity: 1; pointer-events: auto; z-index: 2; }
+  .page[class*="tp-"] { opacity: 1; z-index: 3; }
   .page .wrap { width: min(880px, 92vw); position: relative; }
   .pgno { position: absolute; top: 84px; right: clamp(18px, 5vw, 48px); font-family: var(--mono);
     font-size: 10px; letter-spacing: .4em; color: var(--acc, var(--hot)); opacity: .8; }
@@ -107,30 +107,59 @@
   #nums     { --acc: var(--hot);    --accbg: rgba(255,107,157,.13); }
   #chart    { --acc: var(--mint);   --accbg: rgba(94,234,212,.13); }
   #end      { --acc: var(--hot);    --accbg: rgba(255,107,157,.15); }
-
-  .page::before, .page::after { content: ""; position: absolute; width: 46vmin; aspect-ratio: 1;
-    border-radius: 50%; background: var(--acc, var(--hot)); opacity: .07; filter: blur(60px); }
-  .page::before { top: -16vmin; left: -14vmin; }
-  .page::after { bottom: -18vmin; right: -14vmin; }
+  .page .blob { position: absolute; width: 46vmin; aspect-ratio: 1; border-radius: 50%;
+    background: var(--acc, var(--hot)); opacity: .07; filter: blur(60px); pointer-events: none; }
+  .page .blob.tl { top: -16vmin; left: -14vmin; }
+  .page .blob.br { bottom: -18vmin; right: -14vmin; }
 
   html.js .st { opacity: 0; transform: translateY(36px);
     transition: opacity .65s var(--snap), transform .65s var(--snap);
     transition-delay: calc(var(--i, 0) * .1s); }
   html.js .page.in .st { opacity: 1; transform: none; }
 
-  /* glow particles (hero) */
-  .fdeco { position: absolute; border-radius: 50%; pointer-events: none; opacity: .8; }
-  .fdeco.p1 { width: 5px; height: 5px; background: var(--hot);    box-shadow: 0 0 10px var(--hot);    top: 20%; left: 9%; }
-  .fdeco.p2 { width: 4px; height: 4px; background: var(--sky);    box-shadow: 0 0 9px var(--sky);     top: 26%; right: 11%; }
-  .fdeco.p3 { width: 6px; height: 6px; background: var(--violet); box-shadow: 0 0 11px var(--violet); bottom: 27%; left: 14%; }
-  .fdeco.p4 { width: 4px; height: 4px; background: var(--mint);   box-shadow: 0 0 9px var(--mint);    bottom: 33%; right: 16%; }
-  .fdeco.p5 { width: 3px; height: 3px; background: var(--sakura); box-shadow: 0 0 8px var(--sakura);  top: 50%; right: 6%; }
-  .page.in .fdeco { animation: floaty ease-in-out infinite alternate; }
-  .fdeco.p1 { animation-duration: 5.2s; } .fdeco.p2 { animation-duration: 6.4s; animation-delay: .6s; }
-  .fdeco.p3 { animation-duration: 7.1s; animation-delay: 1.1s; } .fdeco.p4 { animation-duration: 5.8s; animation-delay: .3s; }
-  .fdeco.p5 { animation-duration: 6.8s; animation-delay: 1.5s; }
-  @keyframes floaty { from { transform: translateY(0); } to { transform: translateY(-18px); } }
-  @media (max-width: 680px) { .fdeco { display: none; } }
+  /* ============ DECK TRANSITIONS (sampled per boundary) ============ */
+  /* push (soft chase) */
+  .page.tp-out-f { animation: tpOutF .8s var(--snap) both; }
+  .page.tp-in-f  { animation: tpInF  .8s var(--snap) .07s both; }
+  .page.tp-out-b { animation: tpOutB .8s var(--snap) both; }
+  .page.tp-in-b  { animation: tpInB  .8s var(--snap) .07s both; }
+  @keyframes tpOutF { from { transform: none; opacity: 1; } to { transform: translateY(-48vh); opacity: 0; } }
+  @keyframes tpInF  { from { transform: translateY(54vh); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes tpOutB { from { transform: none; opacity: 1; } to { transform: translateY(48vh); opacity: 0; } }
+  @keyframes tpInB  { from { transform: translateY(-54vh); opacity: 0; } to { transform: none; opacity: 1; } }
+  /* skewed two-tone sweep */
+  .tv { position: fixed; pointer-events: none; }
+  .tv-skew { inset: -14%; z-index: 89; transform: translateX(-135%) skewX(-12deg); display: none; }
+  .tv-skew.b2 { z-index: 88; }
+  body.tr-skew .tv-skew { display: block; animation: tvSkew .8s var(--snap) both; }
+  body.tr-skew .tv-skew.b2 { animation-delay: .1s; }
+  @keyframes tvSkew { 0% { transform: translateX(-135%) skewX(-12deg); } 42% { transform: translateX(0) skewX(-12deg); }
+    54% { transform: translateX(0) skewX(-12deg); } 100% { transform: translateX(135%) skewX(-12deg); } }
+  /* iris pulse */
+  .tv-iris { inset: 0; z-index: 89; clip-path: circle(0% at 50% 50%); display: none; }
+  body.tr-iris .tv-iris { display: block; animation: tvIris .95s var(--snap) both; }
+  @keyframes tvIris { 0% { clip-path: circle(0% at 50% 50%); } 40% { clip-path: circle(152% at 50% 50%); }
+    55% { clip-path: circle(152% at 50% 50%); } 100% { clip-path: circle(0% at 50% 50%); } }
+  /* shuffled blinds */
+  .tv-blinds { inset: 0; z-index: 89; display: none; grid-template-columns: repeat(5, 1fr); }
+  body.tr-blinds .tv-blinds { display: grid; }
+  .tv-blinds i { position: relative; overflow: hidden; }
+  .tv-blinds i::before { content: ""; position: absolute; inset: 0; background: var(--tvc, var(--hot));
+    transform: translateY(-103%); }
+  body.tr-blinds .tv-blinds i::before { animation: tvFall .9s var(--snap) both; animation-delay: var(--d); }
+  .tv-blinds i:nth-child(1) { --d: 0s; }   .tv-blinds i:nth-child(2) { --d: .06s; }
+  .tv-blinds i:nth-child(3) { --d: .12s; } .tv-blinds i:nth-child(4) { --d: .03s; }
+  .tv-blinds i:nth-child(5) { --d: .09s; }
+  @keyframes tvFall { 0% { transform: translateY(-103%); } 36% { transform: translateY(0); }
+    62% { transform: translateY(0); } 100% { transform: translateY(103%); } }
+  /* ear-curtain (finale) */
+  .tv-ears { left: 0; top: -7.5vh; width: 100vw; height: 115vh; z-index: 89;
+    clip-path: var(--ears); transform: translateY(-103%); display: none; }
+  .tv-ears.e2 { z-index: 88; }
+  body.tr-ears .tv-ears { display: block; animation: tvEars .85s var(--snap) both; }
+  body.tr-ears .tv-ears.e2 { animation-delay: .1s; }
+  @keyframes tvEars { 0% { transform: translateY(-103%); } 42% { transform: translateY(0); }
+    52% { transform: translateY(0); } 100% { transform: translateY(103%); } }
 
   /* ---------- hero ---------- */
   #hero { text-align: center; }
@@ -155,7 +184,7 @@
   .stats-line i:nth-child(1) { color: var(--hot); }
   .stats-line i:nth-child(2) { color: var(--sky); }
   .stats-line i:nth-child(3) { color: var(--mint); }
-  .stats-line .cur { color: var(--hot); animation: blink 1.1s steps(2, start) infinite; }
+  .stats-line .cur2 { color: var(--hot); animation: blink 1.1s steps(2, start) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   #hero .ticker { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden;
     white-space: nowrap; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
@@ -164,8 +193,20 @@
   .ticker:hover span { animation-play-state: paused; }
   @keyframes scroll { to { transform: translateX(-50%); } }
   .ticker i { font-style: normal; margin: 0 14px; }
+  .fdeco { position: absolute; border-radius: 50%; pointer-events: none; opacity: .8; }
+  .fdeco.p1 { width: 5px; height: 5px; background: var(--hot);    box-shadow: 0 0 10px var(--hot);    top: 20%; left: 9%; }
+  .fdeco.p2 { width: 4px; height: 4px; background: var(--sky);    box-shadow: 0 0 9px var(--sky);     top: 26%; right: 11%; }
+  .fdeco.p3 { width: 6px; height: 6px; background: var(--violet); box-shadow: 0 0 11px var(--violet); bottom: 27%; left: 14%; }
+  .fdeco.p4 { width: 4px; height: 4px; background: var(--mint);   box-shadow: 0 0 9px var(--mint);    bottom: 33%; right: 16%; }
+  .fdeco.p5 { width: 3px; height: 3px; background: var(--sakura); box-shadow: 0 0 8px var(--sakura);  top: 50%; right: 6%; }
+  .page.in .fdeco { animation: floaty ease-in-out infinite alternate; }
+  .fdeco.p1 { animation-duration: 5.2s; } .fdeco.p2 { animation-duration: 6.4s; animation-delay: .6s; }
+  .fdeco.p3 { animation-duration: 7.1s; animation-delay: 1.1s; } .fdeco.p4 { animation-duration: 5.8s; animation-delay: .3s; }
+  .fdeco.p5 { animation-duration: 6.8s; animation-delay: 1.5s; }
+  @keyframes floaty { from { transform: translateY(0); } to { transform: translateY(-18px); } }
+  @media (max-width: 680px) { .fdeco { display: none; } }
 
-  /* ---------- section head + swipes ---------- */
+  /* ---------- shared section bits ---------- */
   .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 30px; }
   .sec-head h2 { font-weight: 900; font-size: clamp(24px, 4.4vw, 34px); letter-spacing: .18em; }
   .sec-head small { font-family: var(--mono); font-size: 9px; letter-spacing: .44em; color: var(--acc); }
@@ -180,15 +221,11 @@
   .page.in .swp::before { animation: swpBar .75s var(--snap) .1s both; }
   @keyframes swpTxt { from { opacity: 0; } to { opacity: 1; } }
   @keyframes swpBar { 0% { transform: translateX(-101%); } 42% { transform: translateX(0); } 54% { transform: translateX(0); } 100% { transform: translateX(101%); } }
-
-  /* corner ticks (HUD) */
   .tick { position: relative; }
-  .tick::before, .tick::after { content: ""; position: absolute; width: 13px; height: 13px; opacity: .9;
-    border-radius: 0 !important; background: none !important; filter: none !important; }
+  .tick::before, .tick::after { content: ""; position: absolute; width: 13px; height: 13px; opacity: .9; }
   .tick::before { top: -1px; left: -1px; border-top: 1.5px solid var(--c, var(--hot)); border-left: 1.5px solid var(--c, var(--hot)); }
   .tick::after { bottom: -1px; right: -1px; border-bottom: 1.5px solid var(--c, var(--hot)); border-right: 1.5px solid var(--c, var(--hot)); }
 
-  /* ---------- news ---------- */
   .news { display: grid; border-top: 1px solid var(--line); }
   .news a { display: flex; gap: 18px; align-items: baseline; padding: 18px 8px; color: var(--txt);
     text-decoration: none; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
@@ -199,8 +236,11 @@
   .news .chip { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; border: 1px solid var(--c, var(--line));
     color: var(--c, var(--txt)); border-radius: 3px; padding: 3px 8px; white-space: nowrap; }
   .news p { font-size: 14.5px; letter-spacing: .08em; }
+  html.js .news a.st { transform: none; clip-path: inset(0 100% 0 0);
+    transition: opacity .55s var(--snap), clip-path .6s var(--snap);
+    transition-delay: calc(var(--i, 0) * .1s); }
+  html.js .page.in .news a.st { clip-path: inset(0 0 0 0); }
 
-  /* ---------- research ---------- */
   .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   @media (max-width: 760px) { .cards3 { grid-template-columns: 1fr; gap: 10px; } }
   .rcard { background: var(--panel); border: 1px solid var(--line); padding: 26px 20px;
@@ -212,8 +252,11 @@
   .rcard .badge { position: absolute; top: -10px; right: 14px; background: var(--void);
     border: 1px solid var(--c); color: var(--c); font-family: var(--mono); font-size: 9px;
     padding: 3px 9px; letter-spacing: .16em; }
+  html.js .rcard.st { transform: none; clip-path: inset(-24% 100% -6% -2%);
+    transition: opacity .55s var(--snap), clip-path .6s var(--snap);
+    transition-delay: calc(var(--i, 0) * .1s); }
+  html.js .page.in .rcard.st { clip-path: inset(-24% -2% -6% -2%); }
 
-  /* ---------- numbers ---------- */
   .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; text-align: center; }
   @media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } }
   .num { background: var(--panel); border: 1px solid var(--line); padding: 30px 10px 24px; cursor: pointer; }
@@ -222,8 +265,10 @@
   .num b small { font-size: .5em; font-family: "Zen Maru Gothic", sans-serif; }
   .num span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .2em; margin-top: 12px; color: var(--dim); }
   .num.bump { animation: petBounce .5s var(--pop); }
+  html.js .num.st { transform: translateY(30px) scale(.92);
+    transition: opacity .5s var(--pop), transform .5s var(--pop);
+    transition-delay: calc(var(--i, 0) * .1s); }
 
-  /* ---------- chart ---------- */
   .chartbox { background: var(--panel); border: 1px solid var(--line); padding: 26px 22px 14px; }
   .chartbox .cap { display: flex; justify-content: space-between; font-family: var(--mono);
     font-size: 10px; letter-spacing: .14em; margin-bottom: 12px; color: var(--dim); }
@@ -242,7 +287,6 @@
     opacity: 0; transition: opacity .2s; }
   .mkr:hover .tip { opacity: 1; }
 
-  /* ---------- end ---------- */
   #end { text-align: center; }
   #end .mk { color: var(--hot); filter: drop-shadow(0 0 18px rgba(255,107,157,.65)); }
   #end h2 { font-size: clamp(26px, 5vw, 44px); font-weight: 900; letter-spacing: .1em; margin-top: 24px; }
@@ -289,17 +333,8 @@
   .play .status { animation: navIn .6s var(--snap) 3.3s both; }
   @media (max-width: 680px) { .status { display: none; } }
 
-  /* page-jump ear-wipe */
-  .zap { position: fixed; left: 0; top: -7.5vh; width: 100vw; height: 115vh; z-index: 88;
-    clip-path: var(--ears); transform: translateY(-103%); pointer-events: none; }
-  .zap.z1 { background: var(--hot); z-index: 89; }
-  .zap.z2 { background: #08080d; }
-  body.zapping .zap.z1 { animation: zapSweep .85s var(--snap) both; }
-  body.zapping .zap.z2 { animation: zapSweep .85s var(--snap) .1s both; }
-  @keyframes zapSweep { 0% { transform: translateY(-103%); } 42% { transform: translateY(0); } 52% { transform: translateY(0); } 100% { transform: translateY(103%); } }
-
   /* ================= TOYS ================= */
-  .mk { cursor: pointer; }
+  .mk { display: inline-block; vertical-align: middle; cursor: pointer; }
   .petted { animation: petBounce .5s var(--pop); }
   @keyframes petBounce { 30% { transform: scale(1.25) rotate(-8deg); } 60% { transform: scale(.94) rotate(5deg); } }
   .heartpop { position: fixed; z-index: 99; font-size: 18px; color: var(--hot); pointer-events: none;
@@ -344,8 +379,6 @@
   <div class="veil c"></div>
   <div class="veil a"></div>
   <div class="cover"></div>
-  <div class="zap z2"></div>
-  <div class="zap z1"></div>
   <div class="tcard">
     <h2><span class="ch">け</span><span class="ch">も</span><span class="ch">み</span><span
       class="ch">み</span><span class="ch">研</span><span class="ch">究</span><span class="ch">所</span><span class="dot"></span></h2>
@@ -353,12 +386,20 @@
   </div>
   <button class="skipbtn" onclick="skipIntro()">SKIP →</button>
 
+  <!-- deck transition veils -->
+  <div class="tv tv-skew b2"></div>
+  <div class="tv tv-skew b1"></div>
+  <div class="tv tv-iris"></div>
+  <div class="tv tv-blinds"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="tv tv-ears e2"></div>
+  <div class="tv tv-ears e1"></div>
+
   <nav>
     <svg class="mk" width="22" height="19"><use href="#earmark"/></svg>
     <b>けもみみ研究所</b>
-    <span class="vtag">KML // v0.4</span>
+    <span class="vtag">KML // v0.5</span>
     <span class="links">
-      <a href="#news">おしらせ</a><a href="#research">けんきゅう</a><a href="#nums">すうじ</a><a href="#chart">きろく</a><a href="#end">れんらく</a>
+      <a data-t="news">おしらせ</a><a data-t="research">けんきゅう</a><a data-t="nums">すうじ</a><a data-t="chart">きろく</a><a data-t="end">れんらく</a>
     </span>
   </nav>
 
@@ -371,11 +412,12 @@
     <button data-t="end" data-label="れんらく" style="--dc:var(--hot)"></button>
   </div>
 
-  <div class="hint"><span>SCROLL</span><i></i></div>
+  <div class="hint"><span>SCROLL / NEXT</span><i></i></div>
   <div class="status"><i></i><span>TRAINING — GEN1 RANDOM BATTLES ／ 目標：Metamon 超え</span></div>
 
   <main class="pages">
     <section class="page" id="hero">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="fdeco p1"></span><span class="fdeco p2"></span><span class="fdeco p3"></span>
       <span class="fdeco p4"></span><span class="fdeco p5"></span>
       <div class="wrap">
@@ -383,7 +425,7 @@
         <h1 class="hero-t st" style="--i:1"><span class="hc">猫</span><span class="hc">耳</span><span class="hc">は</span><span
           class="hc">、</span><span class="hc">最</span><span class="hc">強</span><span class="hc d">。</span></h1>
         <p class="lead st" style="--i:2">ゲームがつよい猫耳を、まじめに研究しています。</p>
-        <p class="stats-line st" style="--i:3"><i>930K bt/s</i> ／ <i>1000/1000</i> ／ <i>reward ±1</i><span class="cur">▌</span></p>
+        <p class="stats-line st" style="--i:3"><i>930K bt/s</i> ／ <i>1000/1000</i> ／ <i>reward ±1</i><span class="cur2">▌</span></p>
       </div>
       <div class="ticker"><span>
         KEMONOMIMI LAB <i style="color:#ff6b9d">♥</i> PHASE-0 CLEAR <i style="color:#5eead4">♥</i> 930,000 battles/s <i style="color:#6fc3ff">♥</i> NEXT: METAMON <i style="color:#a78bfa">♥</i> にゃー！ <i style="color:#ffa7c4">♥</i>
@@ -392,6 +434,7 @@
     </section>
 
     <section class="page" id="news">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="pgno">02 / 06</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>おしらせ</span></h2><small>NEWS.LOG</small></div>
@@ -404,6 +447,7 @@
     </section>
 
     <section class="page" id="research">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="pgno">03 / 06</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>けんきゅう</span></h2><small>RESEARCH</small></div>
@@ -419,6 +463,7 @@
     </section>
 
     <section class="page" id="nums">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="pgno">04 / 06</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>すうじで見る</span></h2><small>TELEMETRY</small></div>
@@ -432,6 +477,7 @@
     </section>
 
     <section class="page" id="chart">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="pgno">05 / 06</span>
       <div class="wrap">
         <div class="sec-head st" style="--i:0"><h2 class="swp"><span>きろく</span></h2><small>TRAINING.PLOT</small></div>
@@ -456,6 +502,7 @@
     </section>
 
     <section class="page" id="end">
+      <span class="blob tl"></span><span class="blob br"></span>
       <span class="pgno">06 / 06</span>
       <div class="wrap">
         <div class="st" style="--i:0"><svg class="mk" width="46" height="40"><use href="#earmark"/></svg></div>
@@ -472,23 +519,60 @@
 
   <script>
     const html = document.documentElement, body = document.body;
-    const pages = document.querySelector(".pages");
-    const reduced = false; /* モーション全開、にゃ〜 */
-    let io = null, ioTimer = null, bootTimer = null;
+    const stage = document.querySelector(".pages");
+    const slides = [...document.querySelectorAll(".page")];
+    const COLS = ["#0d0f16", "#0d121a", "#13101d", "#180f17", "#0d1613", "#08080d"];
+    const TRANS = ["skew", "push", "blinds", "iris", "ears"]; /* boundary i-1 -> i */
+    let cur = 0, busy = true, introT1 = null, introT2 = null;
 
-    function startIO() {
-      if (io) io.disconnect();
-      io = new IntersectionObserver(es => es.forEach(x => {
-        if (!x.isIntersecting) return;
-        const pg = x.target;
-        document.querySelectorAll(".page.cur").forEach(p => p.classList.remove("cur"));
-        pg.classList.add("in", "cur");
-        document.querySelectorAll(".rail button").forEach(b => b.classList.toggle("cur", b.dataset.t === pg.id));
-        body.classList.toggle("atend", pg.id === "end");
-        body.dataset.cur = pg.id;
-        if (pg.id === "nums") pg.querySelectorAll("[data-cnt]").forEach(runCnt);
-      }), { root: pages, threshold: .55 });
-      document.querySelectorAll(".page").forEach(p => io.observe(p));
+    /* ---------- deck engine ---------- */
+    function arrive(i) {
+      slides[i].classList.add("cur", "in");
+      document.querySelectorAll(".rail button").forEach(b => b.classList.toggle("cur", b.dataset.t === slides[i].id));
+      body.classList.toggle("atend", i === slides.length - 1);
+      body.dataset.cur = slides[i].id;
+      stage.style.backgroundColor = COLS[i];
+      if (slides[i].id === "nums") slides[i].querySelectorAll("[data-cnt]").forEach(runCnt);
+    }
+    function setVeilColors(to) {
+      const acc = getComputedStyle(slides[to]).getPropertyValue("--acc").trim() || "#ff6b9d";
+      document.querySelector(".tv-skew.b1").style.background = acc;
+      document.querySelector(".tv-skew.b2").style.background = "#08080d";
+      document.querySelector(".tv-iris").style.background = acc;
+      document.querySelector(".tv-ears.e1").style.background = acc;
+      document.querySelector(".tv-ears.e2").style.background = "#08080d";
+      document.querySelectorAll(".tv-blinds i").forEach((el, k) =>
+        el.style.setProperty("--tvc", k % 2 ? "#08080d" : acc));
+    }
+    function go(to) {
+      if (busy || to === cur || to < 0 || to >= slides.length) return;
+      busy = true;
+      const from = cur; cur = to;
+      const t = TRANS[Math.max(from, to) - 1] || "push";
+      if (t === "push") {
+        const fwd = to > from;
+        slides[to].classList.add("in", fwd ? "tp-in-f" : "tp-in-b");
+        slides[from].classList.add(fwd ? "tp-out-f" : "tp-out-b");
+        arriveSoft(to);
+        setTimeout(() => {
+          slides[from].classList.remove("cur", "tp-out-f", "tp-out-b");
+          slides[to].classList.remove("tp-in-f", "tp-in-b");
+          arrive(to); busy = false;
+        }, 900);
+      } else {
+        setVeilColors(to);
+        const cls = "tr-" + t;
+        const swapAt = { skew: 400, iris: 450, blinds: 500, ears: 400 }[t];
+        const endAt = { skew: 960, iris: 1010, blinds: 1090, ears: 1010 }[t];
+        body.classList.add(cls);
+        setTimeout(() => { slides[from].classList.remove("cur"); arrive(to); }, swapAt);
+        setTimeout(() => { body.classList.remove(cls); busy = false; }, endAt);
+      }
+    }
+    function arriveSoft(i) { /* chrome updates during push, without class swap */
+      document.querySelectorAll(".rail button").forEach(b => b.classList.toggle("cur", b.dataset.t === slides[i].id));
+      body.classList.toggle("atend", i === slides.length - 1);
+      stage.style.backgroundColor = COLS[i];
     }
     function runCnt(el) {
       if (el.dataset.done) return; el.dataset.done = "1";
@@ -499,54 +583,56 @@
         if (k < 1) requestAnimationFrame(f);
       })(st);
     }
+
+    /* ---------- input ---------- */
+    let wheelLock = 0, touchY = null;
+    addEventListener("wheel", e => {
+      if (busy || Math.abs(e.deltaY) < 24) return;
+      const now = Date.now(); if (now < wheelLock) return;
+      wheelLock = now + 1000;
+      go(cur + (e.deltaY > 0 ? 1 : -1));
+    }, { passive: true });
+    addEventListener("touchstart", e => touchY = e.touches[0].clientY, { passive: true });
+    addEventListener("touchend", e => {
+      if (touchY === null || busy) return;
+      const d = touchY - e.changedTouches[0].clientY; touchY = null;
+      if (Math.abs(d) > 50) go(cur + (d > 0 ? 1 : -1));
+    }, { passive: true });
+    addEventListener("keydown", e => {
+      if (["ArrowDown", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+      else if (["ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+      else if (e.key === "Home") go(0);
+      else if (e.key === "End") go(slides.length - 1);
+    });
+    document.querySelectorAll(".rail button, nav .links a").forEach(el =>
+      el.addEventListener("click", () => go(slides.findIndex(s => s.id === el.dataset.t))));
+
+    /* ---------- intro ---------- */
     function begin() {
       body.classList.add("play");
-      ioTimer = setTimeout(startIO, 2500);
-      bootTimer = setTimeout(() => html.classList.remove("boot"), 3600);
+      slides[0].classList.add("cur");
+      introT1 = setTimeout(() => { arrive(0); busy = false; }, 2500);
+      introT2 = setTimeout(() => html.classList.remove("boot"), 3600);
     }
     function skipIntro() {
-      clearTimeout(ioTimer); clearTimeout(bootTimer);
+      clearTimeout(introT1); clearTimeout(introT2);
       body.classList.remove("play"); body.classList.add("skipped");
-      html.classList.remove("boot"); startIO();
+      html.classList.remove("boot");
+      slides[0].classList.add("cur"); arrive(0); busy = false;
     }
     function replayIntro() {
-      clearTimeout(ioTimer); clearTimeout(bootTimer);
-      if (io) io.disconnect();
-      body.classList.remove("skipped", "atend", "zapping");
-      document.querySelectorAll(".page").forEach(p => p.classList.remove("in", "cur"));
+      clearTimeout(introT1); clearTimeout(introT2);
+      busy = true;
+      body.classList.remove("skipped", "atend", "tr-skew", "tr-iris", "tr-blinds", "tr-ears");
+      slides.forEach(s => s.classList.remove("cur", "in", "tp-in-f", "tp-in-b", "tp-out-f", "tp-out-b"));
       document.querySelectorAll("[data-cnt]").forEach(e => { delete e.dataset.done; e.textContent = "0"; });
-      pages.scrollTo({ top: 0, behavior: "instant" });
+      cur = 0; stage.style.backgroundColor = COLS[0];
       html.classList.add("boot");
       body.classList.remove("play"); void body.offsetWidth;
       begin();
     }
-    let zapT = null;
-    function navTo(id) {
-      if (body.classList.contains("zapping")) return;
-      body.classList.add("zapping");
-      setTimeout(() => document.getElementById(id).scrollIntoView({ behavior: "instant" }), 400);
-      clearTimeout(zapT);
-      zapT = setTimeout(() => body.classList.remove("zapping"), 1000);
-    }
-    document.querySelectorAll(".rail button, nav .links a").forEach(el =>
-      el.addEventListener("click", ev => {
-        ev.preventDefault();
-        navTo(el.dataset.t || el.getAttribute("href").slice(1));
-      }));
 
-    /* scroll-driven color lerp — dark hues */
-    const COLS = [[13,15,22],[13,18,26],[19,16,29],[24,15,23],[13,22,19],[8,8,13]];
-    function lerpBg() {
-      const H = pages.clientHeight || 1;
-      const t = Math.max(0, Math.min(pages.scrollTop / H, COLS.length - 1.001));
-      const i = Math.floor(t), f = t - i;
-      const a = COLS[i], b = COLS[Math.min(i + 1, COLS.length - 1)];
-      pages.style.backgroundColor = `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")})`;
-    }
-    pages.addEventListener("scroll", () => requestAnimationFrame(lerpBg), { passive: true });
-    addEventListener("resize", lerpBg);
-
-    /* toys */
+    /* ---------- toys ---------- */
     const PAL = ["#ff6b9d", "#6fc3ff", "#a78bfa", "#5eead4", "#ffa7c4"];
     function pet(m) {
       m.classList.remove("petted"); void m.getBoundingClientRect(); m.classList.add("petted");
@@ -586,7 +672,7 @@
       document.querySelectorAll(".mk").forEach(pet);
     }
 
-    addEventListener("DOMContentLoaded", () => { begin(); lerpBg(); });
+    addEventListener("DOMContentLoaded", () => { stage.style.backgroundColor = COLS[0]; begin(); });
   </script>
 </body>
 </html>

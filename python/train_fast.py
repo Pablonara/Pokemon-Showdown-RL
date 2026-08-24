@@ -190,10 +190,17 @@ class Opponents:
 
     def _pfsp_draw(self, idx):
         """PFSP over member subset idx: 0.5 uniform + 0.5 hard-weighted.
-        A dominant opponent (w->0) autoscales toward the whole share."""
+        Hard-weighting is a FOREIGN-members privilege: self-snapshots sit at
+        w~0.5 by construction (hardness-from-being-a-copy is a false positive
+        for signal) and would otherwise soak the hard half. They still play
+        via the uniform half (anti-forgetting)."""
         w = self.wr_m[idx]
         h = (1.0 - w) ** 2
-        p = 0.5 / len(idx) + 0.5 * h / max(h.sum(), 1e-9)
+        for k, j in enumerate(idx):
+            if self.members[j].startswith("snap"):
+                h[k] = 0.0
+        s = h.sum()
+        p = 0.5 / len(idx) + (0.5 * h / s if s > 1e-9 else 0.5 / len(idx))
         return int(np.random.choice(idx, p=p / p.sum()))
 
     def resample(self, i):
