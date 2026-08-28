@@ -436,6 +436,12 @@ def main():
 
     for it in range(1, args.iters + 1):
         t0 = time.time()
+        if it <= 50:  # warmup: fresh Adam state on converged weights is violent
+            for g in opt.param_groups:
+                g["lr"] = args.lr * (0.1 + 0.9 * it / 50)
+        elif it == 51:
+            for g in opt.param_groups:
+                g["lr"] = args.lr
         slab = Slab(args.rows + n_streams + 8)
         model.eval()
         while slab.ptr < args.rows:
@@ -600,7 +606,11 @@ def main():
                     continue
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                gn = nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                if not torch.isfinite(gn):
+                    print(f"it {it}: non-finite grad norm, step skipped", flush=True)
+                    opt.zero_grad(set_to_none=True)
+                    continue
                 opt.step()
                 with torch.no_grad():
                     unrev = valid[..., None] & (t["rev"] == 0) & (t["sp"] > 0)
