@@ -43,6 +43,10 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--greedy", action="store_true",
                     help="argmax actions (strongest vs one-shot/static foes; predictable + loop-prone)")
+    ap.add_argument("--min-p", type=float, default=0.15,
+                    help="drop actions below this fraction of the top action's "
+                         "probability (kills 1%%-accident samples, keeps near-ties); "
+                         "0 disables")
     ap.add_argument("--temp", type=float, default=None,
                     help="sampling temperature; ~0.5 = near-greedy strength, breaks loops, "
                          "less predictable vs repeat/adaptive opponents")
@@ -101,6 +105,10 @@ def main():
                 if args.temp:
                     logits = logits / args.temp
                 dist = masked_dist(logits, mask)
+                if args.min_p > 0 and not args.greedy:
+                    p = dist.probs.clone()
+                    p[p < args.min_p * p.max()] = 0.0
+                    dist = torch.distributions.Categorical(probs=p)
                 action = int(dist.probs.argmax(-1) if args.greedy and not args.temp
                              else dist.sample())
                 win_prob = float(model.v(h))
