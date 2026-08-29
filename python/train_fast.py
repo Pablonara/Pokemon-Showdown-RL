@@ -370,6 +370,10 @@ def main():
     ap.add_argument("--hot-frac", type=float, default=0.15,
                     help="fraction of mirror envs sampled at high temperature (state diversity)")
     ap.add_argument("--hot-temp", type=float, default=1.5)
+    ap.add_argument("--loop-hot", type=int, default=0,
+                    help="if >0: an env whose material potential stalls for this many "
+                         "consecutive decisions goes hot until it moves (heal-loop breaker; "
+                         "IS-corrected like normal hot lanes)")
     ap.add_argument("--dex-feats", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--eval-every", type=int, default=25)
     ap.add_argument("--d", type=int, default=384)
@@ -411,6 +415,12 @@ def main():
 
     env = Gen1Env(POOL, n=args.envs, seed=1)
     n_streams = args.envs * 2
+    # loop-breaker: net material progress over a K-decision window (heal loops
+    # OSCILLATE phi turn-to-turn; only the windowed net delta exposes them)
+    K_LOOP = max(args.loop_hot, 1)
+    phi_hist = np.zeros((args.envs, K_LOOP), np.float32)
+    phi_cnt = np.zeros(args.envs, np.int64)
+    loop_hot = np.zeros(args.envs, bool)
     cache = model.new_cache(n_streams, device, torch.bfloat16 if amp else torch.float32)
     stream_rows = [[] for _ in range(n_streams)]
     carry = [None] * n_streams
@@ -459,8 +469,9 @@ def main():
                     h = model.step(torch.from_numpy(mi).to(device),
                                    torch.from_numpy(mf).to(device), cache, idx)
                     logits = model.pi(h)
-                    if args.hot_frac > 0:
-                        hot = torch.from_numpy(opps.hot[rows // 2]).to(device)
+                    if args.hot_frac > 0 or args.loop_hot > 0:
+                        hot = torch.from_numpy(
+                            opps.hot[rows // 2] | loop_hot[rows // 2]).to(device)
                         logits = logits / torch.where(hot, args.hot_temp, 1.0)[:, None]
                     dist = masked_dist(logits, torch.from_numpy(mk).to(device))
                     acts_t = dist.sample()
@@ -477,13 +488,27 @@ def main():
                 slab.a["mask"][sl] = mk
                 slab.a["act"][sl] = acts
                 slab.a["logp"][sl] = logp
-                slab.a["phi"][sl] = material_phi(mf)
+                phi_rows = material_phi(mf)
+                slab.a["phi"][sl] = phi_rows
+                if args.loop_hot > 0:
+                    p0 = rows % 2 == 0  # track stagnation from player-0 decisions
+                    envs0 = rows[p0] // 2
+                    ph = phi_rows[p0]
+                    idx = phi_cnt[envs0] % K_LOOP
+                    full = phi_cnt[envs0] >= K_LOOP
+                    loop_hot[envs0] = full & (
+                        np.abs(ph - phi_hist[envs0, idx]) < 0.05)
+                    phi_hist[envs0, idx] = ph
+                    phi_cnt[envs0] += 1
                 for j, r in enumerate(rows):
                     stream_rows[r].append(slab.ptr + j)
                 slab.ptr += k
             env.step()
             done = np.flatnonzero(env.dones)
             if len(done):
+                if args.loop_hot > 0:
+                    phi_cnt[done] = 0
+                    loop_hot[done] = False
                 for i in done:
                     ep_turns.append(env.ep_turns[i])
                     for p in (0, 1):
