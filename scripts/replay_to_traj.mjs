@@ -19,10 +19,46 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const requirePS = createRequire(path.join(here, '../pokemon-showdown/'));
-const {Battle, extractChannelMessages} = requirePS('./dist/sim/battle');
-const {Dex} = requirePS('./dist/sim/dex');
+// PS_PATH: point at an era-matched checkout (worktree); old builds ship
+// .sim-dist instead of dist/sim
+const psRoot = process.env.PS_PATH || path.join(here, '../pokemon-showdown');
+const requirePS = createRequire(psRoot + path.sep);
+function loadPS() {
+  try {
+    return {
+      battle: requirePS('./dist/sim/battle'),
+      dex: requirePS('./dist/sim/dex'),
+    };
+  } catch {
+    return {
+      battle: requirePS('./.sim-dist/battle'),
+      dex: requirePS('./.sim-dist/dex'),
+    };
+  }
+}
+const _ps = loadPS();
+const Battle = _ps.battle.Battle ?? _ps.battle;
+const Dex = _ps.dex.Dex ?? _ps.dex; // old eras: dex module IS the Dex
+// extractChannelMessages appeared ~2022; the 2018-2020 sim logs use the
+// legacy convention: |split followed by FOUR channel lines in the order
+// [spectator, p1, p2, omniscient] - keep the omniscient one (exact HP),
+// matching how these replays were recorded
+const extractChannelMessages = _ps.battle.extractChannelMessages ?? ((log) => {
+  const out = [];
+  const lines = log.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('|split')) {
+      out.push(lines[i + 4] ?? '');
+      i += 4;
+    } else {
+      out.push(lines[i]);
+    }
+  }
+  return {'-1': out};
+});
 const dex = Dex.mod('gen1');
+// era-tolerant move lookup: dex.moves.get is the 2021+ API
+const getMove = dex.moves?.get ? (n) => getMove(n) : (n) => dex.getMove(n);
 
 const [outDir, ...shards] = process.argv.slice(2);
 if (!outDir || !shards.length) throw new Error('usage: replay_to_traj.mjs <out_dir> <shards...>');
@@ -77,7 +113,7 @@ const boostsRaw = p => {
 };
 
 const moveNum = id => {
-  const m = dex.moves.get(id);
+  const m = getMove(id);
   return m?.num >= 1 && m.num <= 165 ? m.num : 0;
 };
 
@@ -240,7 +276,7 @@ function processReplay(replay, battleId, out) {
       } else if (parts[1] === 'move') {
         const sideId = parts[2].slice(0, 2);
         const side = battle[sideId];
-        const move = dex.moves.get(parts[3]);
+        const move = getMove(parts[3]);
         if (side.active[0] && move) enc.markMove(side.active[0], move.id);
       }
     }
@@ -268,7 +304,7 @@ function processReplay(replay, battleId, out) {
       const arg = mvMatch[1];
       const slot = /^[1-4]$/.test(arg)
         ? +arg - 1
-        : side.active[0].moveSlots.findIndex(ms => ms.id === dex.moves.get(arg).id);
+        : side.active[0].moveSlots.findIndex(ms => ms.id === getMove(arg).id);
       label = acts.includes(9) && acts.length === 1 ? 9 : slot;
     } else if (swMatch) {
       label = 2 + +swMatch[1];
